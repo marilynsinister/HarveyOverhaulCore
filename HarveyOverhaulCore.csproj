@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>HarveyOverhaul.Core</RootNamespace>
+    <AssemblyName>HarveyOverhaulCore</AssemblyName>
+
+    <ModFolderName>HarveyOverhaulCore</ModFolderName>
+    <EnableModDeploy>true</EnableModDeploy>
+    <EnableGameDebugging>true</EnableGameDebugging>
+    <EnableModZip>false</EnableModZip>
+    <GamePath>D:\Games\Steam\steamapps\common\Stardew Valley</GamePath>
+    <GameModsPath>$(GamePath)\Mods\HarveyOverhaul</GameModsPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Pathoschild.Stardew.ModBuildConfig" Version="4.4.0" />
+    <Reference Include="StardewUI">
+      <HintPath>$(GamePath)\Mods\StardewUI\StardewUI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="manifest.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="assets\views\HarveyPanel.sml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>

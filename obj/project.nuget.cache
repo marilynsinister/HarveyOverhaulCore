@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "Wevi6VC5v0w=",
+  "success": true,
+  "projectFilePath": "c:\\Users\\Admin\\HarveyOverhaulCore\\HarveyOverhaulCore.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Admin\\.nuget\\packages\\pathoschild.stardew.modbuildconfig\\4.4.0\\pathoschild.stardew.modbuildconfig.4.4.0.nupkg.sha512"
+  ],
+  "logs": []
+}

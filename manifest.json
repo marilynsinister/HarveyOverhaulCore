@@ -1,0 +1,17 @@
+{
+  "Name": "Harvey Overhaul Core",
+  "Author": "marilynsinister",
+  "Version": "1.0.0",
+  "Description": "Shared core, UI and integration contracts for Harvey Overhaul mods.",
+  "UniqueID": "marilynsinister.HarveyOverhaul.Core",
+  "EntryDll": "HarveyOverhaulCore.dll",
+  "MinimumApiVersion": "4.0.0",
+  "UpdateKeys": [],
+  "Dependencies": [
+    {
+      "UniqueID": "focustense.StardewUI",
+      "IsRequired": true,
+      "MinimumVersion": "0.6.1"
+    }
+  ]
+}

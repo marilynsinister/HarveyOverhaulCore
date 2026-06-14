@@ -1,0 +1,10 @@
+c:\Users\Admin\HarveyOverhaulCore\bin\Debug\net6.0\manifest.json
+c:\Users\Admin\HarveyOverhaulCore\bin\Debug\net6.0\HarveyOverhaulCore.deps.json
+c:\Users\Admin\HarveyOverhaulCore\bin\Debug\net6.0\HarveyOverhaulCore.dll
+c:\Users\Admin\HarveyOverhaulCore\obj\Debug\net6.0\HarveyOverhaulCore.csproj.AssemblyReference.cache
+c:\Users\Admin\HarveyOverhaulCore\obj\Debug\net6.0\HarveyOverhaulCore.GeneratedMSBuildEditorConfig.editorconfig
+c:\Users\Admin\HarveyOverhaulCore\obj\Debug\net6.0\HarveyOverhaulCore.AssemblyInfoInputs.cache
+c:\Users\Admin\HarveyOverhaulCore\obj\Debug\net6.0\HarveyOverhaulCore.AssemblyInfo.cs
+c:\Users\Admin\HarveyOverhaulCore\obj\Debug\net6.0\HarveyOverhaulCore.csproj.CoreCompileInputs.cache
+c:\Users\Admin\HarveyOverhaulCore\obj\Debug\net6.0\HarveyOverhaulCore.dll
+c:\Users\Admin\HarveyOverhaulCore\bin\Debug\net6.0\assets\views\HarveyPanel.sml
