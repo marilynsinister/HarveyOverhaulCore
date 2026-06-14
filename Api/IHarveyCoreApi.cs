@@ -11,5 +11,8 @@ public interface IHarveyCoreApi
     void ClosePanel();
     bool IsPanelOpen { get; }
 
+    bool HasPendingHarveyReview();
+    bool HasPriorityHarveyInteraction();
+
     bool ShouldCountTreatmentTime();
 }

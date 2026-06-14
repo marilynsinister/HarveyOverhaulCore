@@ -29,6 +29,11 @@ public sealed class ModEntry : Mod
         helper.Events.GameLoop.GameLaunched += OnGameLaunched;
         helper.Events.Input.ButtonPressed += OnButtonPressed;
 
+        helper.ConsoleCommands.Add(
+            "harvey_panel_debug",
+            "Debug info for Harvey Overhaul Core panel (StardewUI).",
+            (_, __) => Monitor.Log(_panelMenu.BuildDebugReport(_panelService, _providerRegistry), LogLevel.Info));
+
         Monitor.Log("Harvey Overhaul Core loaded — shared contracts and provider registry ready.", LogLevel.Info);
     }
 

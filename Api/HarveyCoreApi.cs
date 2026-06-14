@@ -31,18 +31,19 @@ public sealed class HarveyCoreApi : IHarveyCoreApi
         => _registry.Unregister(uniqueId);
 
     public void OpenPanel(HarveyPanelTab tab = HarveyPanelTab.Overview)
-    {
-        if (_panelMenu.IsOpen)
-            _panelMenu.OpenToTab(_panelService, tab);
-        else
-            _panelMenu.TryOpen(_panelService, tab);
-    }
+        => _panelMenu.OpenToTab(_panelService, tab);
 
     public void ClosePanel()
         => _panelMenu.Close();
 
     public bool IsPanelOpen
         => _panelMenu.IsOpen;
+
+    public bool HasPendingHarveyReview()
+        => _panelService.HasPendingHarveyReview();
+
+    public bool HasPriorityHarveyInteraction()
+        => _panelService.HasPriorityHarveyInteraction();
 
     public bool ShouldCountTreatmentTime()
         => _gameStateGuard.ShouldCountTreatmentTime();
