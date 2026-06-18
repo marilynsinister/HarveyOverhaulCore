@@ -16,10 +16,10 @@ public sealed class HarveyPanelMenu
     public const string ModUniqueId = "marilynsinister.HarveyOverhaul.Core";
     public const string ViewAssetName = "Mods/marilynsinister.HarveyOverhaul.Core/Views/HarveyPanel";
 
-    private const int PreferredWidth = 900;
-    private const int PreferredHeight = 620;
-    private const int MinWidth = 700;
-    private const int MinHeight = 450;
+    private const int PreferredWidth = 1040;
+    private const int PreferredHeight = 760;
+    private const int MinWidth = 820;
+    private const int MinHeight = 560;
 
     private readonly IMonitor _monitor;
     private IViewEngine? _viewEngine;
@@ -29,6 +29,7 @@ public sealed class HarveyPanelMenu
     private bool _assetsRegistered;
     private bool _delayedOpenScheduled;
     private string? _lastOpenError;
+    private string? _viewsDirectoryPath;
 
     public HarveyPanelMenu(IMonitor monitor)
     {
@@ -61,8 +62,8 @@ public sealed class HarveyPanelMenu
             return;
         }
 
-        string viewsDirectory = Path.Combine(helper.DirectoryPath, "assets", "views");
-        _viewEngine.RegisterViews($"Mods/{ModUniqueId}/Views", viewsDirectory);
+        _viewsDirectoryPath = Path.Combine(helper.DirectoryPath, "assets", "views");
+        _viewEngine.RegisterViews($"Mods/{ModUniqueId}/Views", _viewsDirectoryPath);
 
         string spritesDirectory = Path.Combine(helper.DirectoryPath, "assets", "sprites");
         if (Directory.Exists(spritesDirectory))
@@ -88,7 +89,7 @@ public sealed class HarveyPanelMenu
             TryOpen(panelService);
     }
 
-    public bool TryOpen(HarveyPanelService panelService, HarveyPanelTab? tab = null)
+    public bool TryOpen(HarveyPanelService panelService, HarveyPanelTab? tab = null, bool debugMode = false)
     {
         _lastOpenError = null;
 
@@ -142,9 +143,11 @@ public sealed class HarveyPanelMenu
         try
         {
             _monitor.Log("[HarveyPanel] Opening panel.", LogLevel.Debug);
+            LogViewAssetDiagnostics();
+
             _monitor.Log($"[HarveyPanel] View asset: {ViewAssetName}", LogLevel.Debug);
 
-            HarveyPanelViewModel viewModel = panelService.BuildViewModel(selectedTab);
+            HarveyPanelViewModel viewModel = panelService.BuildViewModel(selectedTab, debugMode);
             if (viewModel.Tabs.Count == 0)
             {
                 _lastOpenError = "view model has no tabs";
@@ -156,8 +159,22 @@ public sealed class HarveyPanelMenu
             _activeViewModel = viewModel;
 
             _monitor.Log(
-                $"[HarveyPanel] ViewModel created. Tabs={viewModel.Tabs.Count}, Sections={viewModel.ActiveSections.Count}",
-                LogLevel.Debug);
+                $"[HarveyPanel] ViewModel created. Tabs={viewModel.Tabs.Count}, Sections={viewModel.ActiveSections.Count}, Tab={viewModel.SelectedTabKey}",
+                LogLevel.Info);
+
+            foreach (var section in viewModel.ActiveSections)
+            {
+                _monitor.Log(
+                    $"[HarveyPanel] Section: headline='{section.Headline}', status='{section.StatusLine}', bodyLen={section.BodyText.Length}",
+                    LogLevel.Info);
+            }
+
+            foreach (var tabButton in viewModel.Tabs)
+            {
+                _monitor.Log(
+                    $"[HarveyPanel] Tab: key='{tabButton.Key}', label='{tabButton.Label}', active={tabButton.Active}",
+                    LogLevel.Debug);
+            }
 
             _menuController?.Dispose();
             _menuController = _viewEngine.CreateMenuControllerFromAsset(ViewAssetName, viewModel);
@@ -208,16 +225,44 @@ public sealed class HarveyPanelMenu
         _menuController.Menu.exitThisMenu();
     }
 
-    public void OpenToTab(HarveyPanelService panelService, HarveyPanelTab tab)
+    public void OpenToTab(HarveyPanelService panelService, HarveyPanelTab tab, bool debugMode = false)
     {
-        if (_activeViewModel != null && _menuController?.Menu != null)
+        if (IsOpen && _menuController?.Menu != null)
         {
-            _activeViewModel.SelectTab(tab.ToString());
-            _lastTab = tab;
+            RebindViewModel(panelService, tab, debugMode);
             return;
         }
 
-        TryOpen(panelService, tab);
+        TryOpen(panelService, tab, debugMode);
+    }
+
+    /// <summary>Пересобрать VM и перепривязать StardewUI (данные плана могли измениться).</summary>
+    private void RebindViewModel(HarveyPanelService panelService, HarveyPanelTab tab, bool debugMode = false)
+    {
+        if (_viewEngine == null)
+            return;
+
+        try
+        {
+            var viewModel = panelService.BuildViewModel(tab, debugMode);
+            viewModel.SetCloseHandler(Close);
+            _activeViewModel = viewModel;
+            _lastTab = tab;
+
+            _menuController?.Dispose();
+            _menuController = _viewEngine.CreateMenuControllerFromAsset(ViewAssetName, viewModel);
+            if (_menuController?.Menu == null)
+                return;
+
+            _menuController.EnableCloseButton(null, null, 1f);
+            ApplyMenuLayout(_menuController);
+            _menuController.Closed += OnMenuClosed;
+            Game1.activeClickableMenu = _menuController.Menu;
+        }
+        catch (Exception ex)
+        {
+            _monitor.Log($"[HarveyPanel] Rebind failed: {ex}", LogLevel.Error);
+        }
     }
 
     public string BuildDebugReport(HarveyPanelService panelService, HarveyProviderRegistry registry)
@@ -279,6 +324,27 @@ public sealed class HarveyPanelMenu
         _monitor.Log(
             $"{prefix}: X={menu.xPositionOnScreen}, Y={menu.yPositionOnScreen}, W={menu.width}, H={menu.height}",
             LogLevel.Debug);
+    }
+
+    private void LogViewAssetDiagnostics()
+    {
+        _monitor.Log($"[HarveyPanel] View asset name: {ViewAssetName}", LogLevel.Debug);
+        _monitor.Log($"[HarveyPanel] Views directory: {_viewsDirectoryPath ?? "(not registered)"}", LogLevel.Debug);
+
+        if (string.IsNullOrWhiteSpace(_viewsDirectoryPath))
+            return;
+
+        string smlPath = Path.Combine(_viewsDirectoryPath, "HarveyPanel.sml");
+        if (!File.Exists(smlPath))
+        {
+            _monitor.Log("[HarveyPanel] HarveyPanel.sml exists: false", LogLevel.Debug);
+            return;
+        }
+
+        var fileInfo = new FileInfo(smlPath);
+        _monitor.Log("[HarveyPanel] HarveyPanel.sml exists: true", LogLevel.Debug);
+        _monitor.Log($"[HarveyPanel] HarveyPanel.sml length: {fileInfo.Length} bytes", LogLevel.Debug);
+        _monitor.Log($"[HarveyPanel] HarveyPanel.sml last write time: {fileInfo.LastWriteTime:O}", LogLevel.Debug);
     }
 
     private void ScheduleDelayedOpen(HarveyPanelService panelService, HarveyPanelTab tab)

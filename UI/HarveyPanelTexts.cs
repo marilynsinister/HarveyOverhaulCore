@@ -76,7 +76,7 @@ internal static class HarveyPanelTexts
     public static class Plan
     {
         public const string NoPlanTitle = "Плана восстановления нет";
-        public const string ActiveTitle = "План восстановления";
+        public const string ActiveTitle = "План Харви";
         public const string StressAssignmentTitle = "Назначение на сегодня";
     }
 }

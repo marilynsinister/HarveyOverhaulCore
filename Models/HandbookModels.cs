@@ -1,5 +1,6 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using StardewUI.Graphics;
 
 namespace HarveyOverhaul.Core.Models;
 
@@ -13,11 +14,18 @@ public sealed class SpriteView
         Texture = texture;
         SourceRect = sourceRect;
     }
+
+    public Sprite ToSprite()
+    {
+        Rectangle rect = SourceRect ?? new Rectangle(0, 0, Texture.Width, Texture.Height);
+        return new Sprite(Texture, rect);
+    }
 }
 
 public sealed class HandbookRow
 {
     public SpriteView IconSprite { get; init; } = null!;
+    public Sprite HandbookIcon => IconSprite.ToSprite();
     public string IconResource { get; init; } = "";
     public string Title { get; init; } = "";
     public string Effects { get; init; } = "";

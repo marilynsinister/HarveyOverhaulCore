@@ -16,11 +16,11 @@ public sealed class HarveyPanelViewModel : INotifyPropertyChanged
     private string _harveyAdviceText = "";
     private Action? _requestClose;
 
-    public string Title { get; init; } = "План Харви";
+    public string Title { get; set; } = "План Харви";
 
-    public ObservableCollection<HarveyPanelTabButtonViewModel> Tabs { get; } = new();
+    public ObservableCollection<HarveyPanelTabButtonViewModel> Tabs { get; private set; } = new();
 
-    public ObservableCollection<HarveyPanelSectionViewModel> ActiveSections { get; } = new();
+    public ObservableCollection<HarveyPanelSectionViewModel> ActiveSections { get; private set; } = new();
 
     public string SelectedTabKey
     {
@@ -64,11 +64,20 @@ public sealed class HarveyPanelViewModel : INotifyPropertyChanged
 
     public string PlanTitle { get; init; } = "";
     public string PlanBody { get; init; } = "";
+    public string PlanDetailBody { get; init; } = "";
+
+    public bool ShowPlanTabContent { get; private set; }
+
+    public bool HasPlanAdvice => !string.IsNullOrWhiteSpace(HarveyAdviceText);
 
     public string TrustLevelLine { get; init; } = "";
     public string TrustDescriptionLine { get; init; } = "";
     public string TrustPermissionsLine { get; init; } = "";
     public string TrustPlaceholder { get; init; } = "";
+
+    public bool ShowDebugFooter { get; init; }
+
+    public string DebugFooterText { get; init; } = "";
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -94,6 +103,13 @@ public sealed class HarveyPanelViewModel : INotifyPropertyChanged
     public void SetCloseHandler(Action? requestClose)
         => _requestClose = requestClose;
 
+    public void InitializeTabs(IEnumerable<HarveyPanelTabButtonViewModel> tabs, string selectedKey)
+    {
+        Tabs = new ObservableCollection<HarveyPanelTabButtonViewModel>(tabs);
+        OnPropertyChanged(nameof(Tabs));
+        SelectTab(selectedKey);
+    }
+
     public bool SelectTab(string key)
     {
         if (string.IsNullOrWhiteSpace(key))
@@ -118,22 +134,39 @@ public sealed class HarveyPanelViewModel : INotifyPropertyChanged
 
     private void RefreshActiveTabContent()
     {
-        ActiveSections.Clear();
+        var sections = new List<HarveyPanelSectionViewModel>();
 
-        if (_sectionsByTab.TryGetValue(SelectedTabKey, out var sections))
+        if (_sectionsByTab.TryGetValue(SelectedTabKey, out var tabSections))
         {
-            foreach (var section in sections)
-                ActiveSections.Add(section);
+            foreach (var section in tabSections)
+                sections.Add(section);
         }
 
-        if (ActiveSections.Count == 0)
+        if (string.Equals(SelectedTabKey, nameof(HarveyPanelTab.Plan), StringComparison.Ordinal)
+            && !string.IsNullOrWhiteSpace(PlanDetailBody)
+            && (sections.Count == 0
+                || sections.All(section =>
+                    string.IsNullOrWhiteSpace(section.BodyText)
+                    && string.IsNullOrWhiteSpace(section.StatusLine))))
         {
-            ActiveSections.Add(new HarveyPanelSectionViewModel
+            sections.Clear();
+            sections.Add(new HarveyPanelSectionViewModel
             {
-                Title = HarveyPanelTexts.Overview.CalmHeadline,
-                Body = "Данных от модов стресса/травм пока нет.",
+                Headline = string.IsNullOrWhiteSpace(PlanTitle) ? HarveyPanelTexts.Tabs.Plan : PlanTitle,
+                BodyText = PlanDetailBody,
             });
         }
+        else if (sections.Count == 0)
+        {
+            sections.Add(new HarveyPanelSectionViewModel
+            {
+                Headline = HarveyPanelTexts.Overview.CalmHeadline,
+                BodyText = "Данных от модов стресса/травм пока нет.",
+            });
+        }
+
+        ActiveSections = new ObservableCollection<HarveyPanelSectionViewModel>(sections);
+        OnPropertyChanged(nameof(ActiveSections));
 
         ActiveTabTitle = _tabTitles.TryGetValue(SelectedTabKey, out var tabTitle)
             ? tabTitle
@@ -142,6 +175,13 @@ public sealed class HarveyPanelViewModel : INotifyPropertyChanged
         HarveyAdviceText = _adviceByTab.TryGetValue(SelectedTabKey, out var advice)
             ? advice
             : OverviewAdviceLine;
+
+        OnPropertyChanged(nameof(HasPlanAdvice));
+
+        ShowPlanTabContent = string.Equals(SelectedTabKey, nameof(HarveyPanelTab.Plan), StringComparison.Ordinal)
+            && !string.IsNullOrWhiteSpace(PlanDetailBody)
+            && sections.Count == 0;
+        OnPropertyChanged(nameof(ShowPlanTabContent));
     }
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)

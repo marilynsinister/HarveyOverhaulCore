@@ -50,12 +50,16 @@ public sealed class HarveyPanelContribution
     public List<HarveyPanelSectionDto> OverviewSections { get; set; } = new();
     public List<HarveyPanelSectionDto> StressSections { get; set; } = new();
     public List<HarveyPanelSectionDto> InjurySections { get; set; } = new();
+    /// <summary>Устарело: вкладка «План» рендерится в Core через care directives.</summary>
+    [Obsolete("Plan tab is rendered by HarveyOverhaulCore from IHarveyCareDirectiveProvider.")]
     public List<HarveyPanelSectionDto> PlanSections { get; set; } = new();
     public List<HarveyPanelSectionDto> TrustSections { get; set; } = new();
 
     public HarveyPanelOverviewFields? OverviewFields { get; set; }
     public HarveyPanelStressFields? StressFields { get; set; }
     public string InjuriesBody { get; set; } = "";
+    /// <summary>Устарело: вкладка «План» рендерится в Core через care directives.</summary>
+    [Obsolete("Plan tab is rendered by HarveyOverhaulCore from IHarveyCareDirectiveProvider.")]
     public HarveyPanelPlanFields? PlanFields { get; set; }
     public HarveyPanelTrustFields? TrustFields { get; set; }
 

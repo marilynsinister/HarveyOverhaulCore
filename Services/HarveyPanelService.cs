@@ -9,26 +9,50 @@ namespace HarveyOverhaul.Core.Services;
 public sealed class HarveyPanelService
 {
     private readonly HarveyProviderRegistry _registry;
+    private readonly HarveyPlanAdvisor _planAdvisor;
 
-    public HarveyPanelService(HarveyProviderRegistry registry)
+    public HarveyPanelService(HarveyProviderRegistry registry, HarveyPlanAdvisor planAdvisor)
     {
         _registry = registry;
+        _planAdvisor = planAdvisor;
+    }
+
+    public (HarveyPlanSnapshot Snapshot, string? FallbackReason) BuildPlanOpenContext()
+    {
+        var contributions = _registry.CollectContributions();
+        var snapshot = _planAdvisor.BuildSnapshot();
+        string? fallbackReason = HarveyPlanDiagnostics.ResolveFallbackReason(
+            _registry,
+            _planAdvisor.DirectiveRegistry,
+            snapshot,
+            contributions);
+
+        if (!string.IsNullOrWhiteSpace(fallbackReason))
+            snapshot.FallbackReason = fallbackReason;
+
+        return (snapshot, fallbackReason);
     }
 
     public bool HasPendingHarveyReview()
         => _registry.CollectContributions().Any(c => c.HasPendingHarveyReview);
 
     public bool HasPriorityHarveyInteraction()
-        => _registry.CollectContributions().Any(c =>
+    {
+        if (_planAdvisor.BuildSnapshot().AllDirectives.Count > 0)
+            return true;
+
+        return _registry.CollectContributions().Any(c =>
             c.HasPendingHarveyReview
             || c.HasPriorityAppointment
             || c.HasActiveRecoveryPlan);
+    }
 
     public HarveyPanelTab ResolveDefaultTab()
     {
         var contributions = _registry.CollectContributions();
+        var snapshot = _planAdvisor.BuildSnapshot();
 
-        if (contributions.Any(c => c.HasActiveRecoveryPlan))
+        if (snapshot.AllDirectives.Count > 0 || contributions.Any(c => c.HasActiveRecoveryPlan))
             return HarveyPanelTab.Plan;
 
         if (contributions.Any(c => c.HasPendingHarveyReview))
@@ -37,16 +61,18 @@ public sealed class HarveyPanelService
         return HarveyPanelTab.Overview;
     }
 
-    public HarveyPanelViewModel BuildViewModel(HarveyPanelTab selectedTab = HarveyPanelTab.Overview)
+    public HarveyPanelViewModel BuildViewModel(HarveyPanelTab selectedTab = HarveyPanelTab.Overview, bool debugMode = false)
     {
         var contributions = _registry.CollectContributions();
         var overview = MergeOverview(contributions);
         var stress = contributions.Select(c => c.StressFields).FirstOrDefault(f => f != null);
         var trust = MergeTrust(contributions);
-        var plan = ResolvePlanFields(contributions);
+        var (planSnapshot, _) = BuildPlanOpenContext();
+        var planSections = BuildPlanSections(planSnapshot);
+        var plan = ResolvePlanFields(contributions, planSnapshot);
         var injuriesBody = ResolveInjuriesBody(contributions);
 
-        ApplyPlaceholders(ref overview, ref stress, ref trust, ref plan, ref injuriesBody, contributions);
+        ApplyPlaceholders(ref overview, ref stress, ref trust, ref plan, ref injuriesBody, contributions, planSnapshot);
 
         var vm = new HarveyPanelViewModel
         {
@@ -66,16 +92,19 @@ public sealed class HarveyPanelService
             InjuriesBody = injuriesBody,
             PlanTitle = plan?.Title ?? "",
             PlanBody = plan?.Body ?? "",
+            PlanDetailBody = HarveyPlanUiBuilder.BuildPlanDetailBody(planSnapshot),
             TrustLevelLine = trust.LevelLine,
             TrustDescriptionLine = trust.DescriptionLine,
             TrustPermissionsLine = trust.PermissionsLine,
             TrustPlaceholder = trust.Placeholder,
+            ShowDebugFooter = debugMode,
+            DebugFooterText = debugMode ? HarveyPlanDiagnostics.BuildDebugFooter(planSnapshot, verbose: true) : "",
         };
 
         vm.ConfigureTabContent(
-            BuildSectionsByTab(contributions, overview, stress, trust, plan, injuriesBody),
+            BuildSectionsByTab(contributions, overview, stress, trust, plan, injuriesBody, planSnapshot, planSections),
             BuildTabTitles(),
-            BuildAdviceByTab(contributions, overview));
+            BuildAdviceByTab(contributions, overview, planSnapshot));
 
         InitializeTabs(vm, selectedTab);
         return vm;
@@ -93,8 +122,11 @@ public sealed class HarveyPanelService
 
     private static IReadOnlyDictionary<string, string> BuildAdviceByTab(
         IReadOnlyList<HarveyPanelContribution> contributions,
-        HarveyPanelOverviewFields overview)
+        HarveyPanelOverviewFields overview,
+        HarveyPlanSnapshot planSnapshot)
     {
+        string planAdvice = ResolvePlanAdvice(planSnapshot);
+
         var mergedAdvice = contributions
             .Select(c => c.HarveyAdviceText)
             .FirstOrDefault(text => !string.IsNullOrWhiteSpace(text))
@@ -106,7 +138,7 @@ public sealed class HarveyPanelService
             [nameof(HarveyPanelTab.Overview)] = mergedAdvice,
             [nameof(HarveyPanelTab.Stress)] = mergedAdvice,
             [nameof(HarveyPanelTab.Injuries)] = mergedAdvice,
-            [nameof(HarveyPanelTab.Plan)] = mergedAdvice,
+            [nameof(HarveyPanelTab.Plan)] = planAdvice,
             [nameof(HarveyPanelTab.Trust)] = mergedAdvice,
         };
     }
@@ -117,23 +149,28 @@ public sealed class HarveyPanelService
         HarveyPanelStressFields? stress,
         HarveyPanelTrustFields trust,
         HarveyPanelPlanFields? plan,
-        string injuriesBody)
+        string injuriesBody,
+        HarveyPlanSnapshot planSnapshot,
+        IReadOnlyList<HarveyPanelSectionViewModel> planSections)
     {
         return new Dictionary<string, IReadOnlyList<HarveyPanelSectionViewModel>>(StringComparer.Ordinal)
         {
-            [nameof(HarveyPanelTab.Overview)] = BuildOverviewSections(contributions, overview),
+            [nameof(HarveyPanelTab.Overview)] = BuildOverviewSections(contributions, overview, planSnapshot),
             [nameof(HarveyPanelTab.Stress)] = BuildStressSections(contributions, stress),
             [nameof(HarveyPanelTab.Injuries)] = BuildInjurySections(contributions, injuriesBody),
-            [nameof(HarveyPanelTab.Plan)] = BuildPlanSections(contributions, plan),
+            [nameof(HarveyPanelTab.Plan)] = EnsurePlanTabSections(planSections, planSnapshot),
             [nameof(HarveyPanelTab.Trust)] = BuildTrustSections(contributions, trust),
         };
     }
 
     private static IReadOnlyList<HarveyPanelSectionViewModel> BuildOverviewSections(
         IReadOnlyList<HarveyPanelContribution> contributions,
-        HarveyPanelOverviewFields overview)
+        HarveyPanelOverviewFields overview,
+        HarveyPlanSnapshot planSnapshot)
     {
         var sections = ConvertDtoSections(contributions.SelectMany(c => c.OverviewSections));
+        PrependPlanSummary(sections, planSnapshot);
+
         if (sections.Count > 0)
             return sections;
 
@@ -143,8 +180,8 @@ public sealed class HarveyPanelService
         {
             result.Add(new HarveyPanelSectionViewModel
             {
-                Title = overview.StateLine,
-                Body = overview.AssignmentLine,
+                Headline = overview.StateLine,
+                BodyText = overview.AssignmentLine,
             });
         }
 
@@ -153,12 +190,14 @@ public sealed class HarveyPanelService
         AddLineSection(result, overview.StressLine, "Стресс");
         AddLineSection(result, overview.InjuriesLine, "Травмы");
 
+        PrependPlanSummary(result, planSnapshot);
+
         if (result.Count == 0)
         {
             result.Add(new HarveyPanelSectionViewModel
             {
-                Title = HarveyPanelTexts.Overview.CalmHeadline,
-                Body = HarveyPanelTexts.Overview.CalmBody,
+                Headline = HarveyPanelTexts.Overview.CalmHeadline,
+                BodyText = HarveyPanelTexts.Overview.CalmBody,
             });
         }
 
@@ -179,9 +218,9 @@ public sealed class HarveyPanelService
         {
             result.Add(new HarveyPanelSectionViewModel
             {
-                Title = stress.AssignmentTitle,
-                Status = HarveyPanelTexts.Plan.StressAssignmentTitle,
-                Body = JoinLines(
+                Headline = stress.AssignmentTitle,
+                StatusLine = HarveyPanelTexts.Plan.StressAssignmentTitle,
+                BodyText = JoinLines(
                     stress.AssignmentProgress,
                     stress.AssignmentObjective,
                     stress.AssignmentAfter),
@@ -192,8 +231,8 @@ public sealed class HarveyPanelService
         {
             result.Add(new HarveyPanelSectionViewModel
             {
-                Title = "Назначение",
-                Body = stress.NoAssignmentLine,
+                Headline = "Назначение",
+                BodyText = stress.NoAssignmentLine,
             });
         }
 
@@ -201,8 +240,8 @@ public sealed class HarveyPanelService
         {
             result.Add(new HarveyPanelSectionViewModel
             {
-                Title = HarveyPanelTexts.Tabs.Stress,
-                Body = HarveyPanelPlaceholders.NoStressData,
+                Headline = HarveyPanelTexts.Tabs.Stress,
+                BodyText = HarveyPanelPlaceholders.NoStressData,
             });
         }
 
@@ -223,8 +262,8 @@ public sealed class HarveyPanelService
             [
                 new HarveyPanelSectionViewModel
                 {
-                    Title = HarveyPanelTexts.Tabs.Injuries,
-                    Body = injuriesBody,
+                    Headline = HarveyPanelTexts.Tabs.Injuries,
+                    BodyText = injuriesBody,
                 },
             ];
         }
@@ -233,40 +272,79 @@ public sealed class HarveyPanelService
         [
             new HarveyPanelSectionViewModel
             {
-                Title = HarveyPanelTexts.Tabs.Injuries,
-                Body = HarveyPanelPlaceholders.NoInjuryData,
+                Headline = HarveyPanelTexts.Tabs.Injuries,
+                BodyText = HarveyPanelPlaceholders.NoInjuryData,
             },
         ];
     }
 
-    private static IReadOnlyList<HarveyPanelSectionViewModel> BuildPlanSections(
-        IReadOnlyList<HarveyPanelContribution> contributions,
-        HarveyPanelPlanFields? plan)
+    private static IReadOnlyList<HarveyPanelSectionViewModel> EnsurePlanTabSections(
+        IReadOnlyList<HarveyPanelSectionViewModel> planSections,
+        HarveyPlanSnapshot planSnapshot)
     {
-        var sections = ConvertDtoSections(contributions.SelectMany(c => c.PlanSections));
-        if (sections.Count > 0)
-            return sections;
+        string detailBody = HarveyPlanUiBuilder.BuildPlanDetailBody(planSnapshot);
+        if (string.IsNullOrWhiteSpace(detailBody))
+            return planSections;
 
-        if (plan != null && HasPlanContent(plan))
+        if (planSections.Count == 0)
         {
             return
             [
                 new HarveyPanelSectionViewModel
                 {
-                    Title = plan.Title,
-                    Body = plan.Body,
+                    Headline = planSnapshot.Title,
+                    BodyText = detailBody,
                 },
             ];
         }
 
-        return
-        [
-            new HarveyPanelSectionViewModel
-            {
-                Title = HarveyPanelPlaceholders.NoRecoveryPlan,
-                Body = "",
-            },
-        ];
+        bool hasRenderableBody = planSections.Any(section =>
+            !string.IsNullOrWhiteSpace(section.BodyText) || !string.IsNullOrWhiteSpace(section.StatusLine));
+
+        if (!hasRenderableBody)
+        {
+            return
+            [
+                new HarveyPanelSectionViewModel
+                {
+                    Headline = planSnapshot.Title,
+                    BodyText = detailBody,
+                },
+            ];
+        }
+
+        return planSections;
+    }
+
+    private static IReadOnlyList<HarveyPanelSectionViewModel> BuildPlanSections(HarveyPlanSnapshot planSnapshot)
+        => HarveyPlanUiBuilder.BuildPlanTabSections(planSnapshot);
+
+    private static string ResolvePlanAdvice(HarveyPlanSnapshot planSnapshot)
+    {
+        if (planSnapshot.RawFactsCount == 0 && planSnapshot.AllDirectives.Count == 0)
+            return HarveyPanelTexts.Overview.CalmAdvice;
+
+        if (!string.IsNullOrWhiteSpace(planSnapshot.HarveyAdvice))
+            return planSnapshot.HarveyAdvice;
+
+        if (planSnapshot.HasAnyContent)
+            return "";
+
+        return planSnapshot.ToneText;
+    }
+
+    private static void PrependPlanSummary(
+        List<HarveyPanelSectionViewModel> sections,
+        HarveyPlanSnapshot planSnapshot)
+    {
+        if (sections.Any(section => section.Headline.StartsWith("Активных назначений:", StringComparison.Ordinal)))
+            return;
+
+        var summary = HarveyPlanUiBuilder.BuildOverviewSummary(planSnapshot);
+        if (summary == null)
+            return;
+
+        sections.Insert(0, summary);
     }
 
     private static IReadOnlyList<HarveyPanelSectionViewModel> BuildTrustSections(
@@ -283,18 +361,18 @@ public sealed class HarveyPanelService
         {
             result.Add(new HarveyPanelSectionViewModel
             {
-                Title = trust.LevelLine,
-                Body = trust.DescriptionLine,
-                Status = trust.PermissionsLine,
+                Headline = trust.LevelLine,
+                BodyText = trust.DescriptionLine,
+                StatusLine = trust.PermissionsLine,
             });
         }
         else if (!string.IsNullOrWhiteSpace(trust.DescriptionLine) || !string.IsNullOrWhiteSpace(trust.PermissionsLine))
         {
             result.Add(new HarveyPanelSectionViewModel
             {
-                Title = HarveyPanelTexts.Tabs.Trust,
-                Status = trust.PermissionsLine,
-                Body = trust.DescriptionLine,
+                Headline = HarveyPanelTexts.Tabs.Trust,
+                StatusLine = trust.PermissionsLine,
+                BodyText = trust.DescriptionLine,
             });
         }
 
@@ -302,8 +380,8 @@ public sealed class HarveyPanelService
         {
             result.Add(new HarveyPanelSectionViewModel
             {
-                Title = HarveyPanelTexts.Tabs.Trust,
-                Body = trust.Placeholder,
+                Headline = HarveyPanelTexts.Tabs.Trust,
+                BodyText = trust.Placeholder,
             });
         }
 
@@ -311,8 +389,8 @@ public sealed class HarveyPanelService
         {
             result.Add(new HarveyPanelSectionViewModel
             {
-                Title = HarveyPanelTexts.Tabs.Trust,
-                Body = "Данных о доверии пока нет.",
+                Headline = HarveyPanelTexts.Tabs.Trust,
+                BodyText = "Данных о доверии пока нет.",
             });
         }
 
@@ -324,14 +402,32 @@ public sealed class HarveyPanelService
             .OrderBy(s => s.Priority)
             .Select(section => new HarveyPanelSectionViewModel
             {
-                Title = section.Title,
-                Status = section.Status,
-                Body = section.Body,
+                Headline = section.Title,
+                StatusLine = section.Status,
+                BodyText = section.Body,
+                AccentColor = MapAccentColor(section.Severity),
+                StatusColor = MapStatusColor(section.Severity),
             })
-            .Where(section => !string.IsNullOrWhiteSpace(section.Title)
-                || !string.IsNullOrWhiteSpace(section.Status)
-                || !string.IsNullOrWhiteSpace(section.Body))
+            .Where(section => !string.IsNullOrWhiteSpace(section.Headline)
+                || !string.IsNullOrWhiteSpace(section.StatusLine)
+                || !string.IsNullOrWhiteSpace(section.BodyText))
             .ToList();
+
+    private static string MapAccentColor(HarveyPanelSeverity severity) => severity switch
+    {
+        HarveyPanelSeverity.Urgent => "#8b4513",
+        HarveyPanelSeverity.Warning => "#7f6139",
+        HarveyPanelSeverity.Success => "#2e6b2e",
+        _ => "#3b2a1a",
+    };
+
+    private static string MapStatusColor(HarveyPanelSeverity severity) => severity switch
+    {
+        HarveyPanelSeverity.Urgent => "#8b4513",
+        HarveyPanelSeverity.Warning => "#7f6139",
+        HarveyPanelSeverity.Success => "#2e6b2e",
+        _ => "#7f6139",
+    };
 
     private static void AddLineSection(List<HarveyPanelSectionViewModel> sections, string line, string? title = null)
     {
@@ -340,8 +436,8 @@ public sealed class HarveyPanelService
 
         sections.Add(new HarveyPanelSectionViewModel
         {
-            Title = title ?? "",
-            Body = line,
+            Headline = title ?? "",
+            BodyText = line,
         });
     }
 
@@ -354,7 +450,8 @@ public sealed class HarveyPanelService
         ref HarveyPanelTrustFields trust,
         ref HarveyPanelPlanFields? plan,
         ref string injuriesBody,
-        IReadOnlyList<HarveyPanelContribution> contributions)
+        IReadOnlyList<HarveyPanelContribution> contributions,
+        HarveyPlanSnapshot planSnapshot)
     {
         bool stressRegistered = _registry.IsRegistered(HarveyProviderRegistry.StressProviderId);
         bool injuryRegistered = _registry.IsRegistered(HarveyProviderRegistry.InjuryProviderId);
@@ -384,17 +481,17 @@ public sealed class HarveyPanelService
                 injuriesBody = HarveyPanelPlaceholders.NoInjuryData;
         }
 
-        if (plan == null || !HasPlanContent(plan))
+        if (planSnapshot.HasAnyContent || planSnapshot.RawFactsCount > 0)
         {
-            bool anyRecoveryFlag = contributions.Any(c => c.HasActiveRecoveryPlan);
-            if (!anyRecoveryFlag)
+            plan = HarveyPlanUiBuilder.BuildPlanFields(planSnapshot);
+        }
+        else if (plan == null || !HasPlanContent(plan))
+        {
+            plan = new HarveyPanelPlanFields
             {
-                plan = new HarveyPanelPlanFields
-                {
-                    Title = HarveyPanelPlaceholders.NoRecoveryPlan,
-                    Body = "",
-                };
-            }
+                Title = HarveyPanelTexts.Overview.CalmHeadline,
+                Body = HarveyPanelTexts.Overview.CalmAdvice,
+            };
         }
 
         if (string.IsNullOrWhiteSpace(overview.StateLine)
@@ -482,29 +579,19 @@ public sealed class HarveyPanelService
         return merged;
     }
 
-    private static HarveyPanelPlanFields? ResolvePlanFields(IReadOnlyList<HarveyPanelContribution> contributions)
+    private static HarveyPanelPlanFields? ResolvePlanFields(
+        IReadOnlyList<HarveyPanelContribution> contributions,
+        HarveyPlanSnapshot planSnapshot)
     {
-        var recoveryPlan = contributions
-            .FirstOrDefault(c => c.HasActiveRecoveryPlan && c.PlanFields != null)
-            ?.PlanFields;
+        if (planSnapshot.AllDirectives.Count > 0)
+            return HarveyPlanUiBuilder.BuildPlanFields(planSnapshot);
 
-        if (recoveryPlan != null)
-            return recoveryPlan;
-
-        var fromFields = contributions.Select(c => c.PlanFields).FirstOrDefault(f => f != null && HasPlanContent(f));
-        if (fromFields != null)
-            return fromFields;
-
-        var sectionText = MergeSectionsText(contributions.SelectMany(c => c.PlanSections));
-        if (string.IsNullOrWhiteSpace(sectionText))
-            return null;
-
-        return new HarveyPanelPlanFields
-        {
-            Title = HarveyPanelTexts.Plan.ActiveTitle,
-            Body = sectionText,
-        };
+        return null;
     }
+
+    public HarveyPlanSnapshot BuildHarveyPlanSnapshot() => _planAdvisor.BuildSnapshot();
+
+    public string BuildPlanDebugReport() => _planAdvisor.BuildDebugReport();
 
     private static string ResolveInjuriesBody(IReadOnlyList<HarveyPanelContribution> contributions)
     {
@@ -548,6 +635,7 @@ public sealed class HarveyPanelService
     private static void InitializeTabs(HarveyPanelViewModel vm, HarveyPanelTab selectedTab)
     {
         var selectedKey = selectedTab.ToString();
+        var tabs = new List<HarveyPanelTabButtonViewModel>();
 
         foreach (var (tab, label) in new[]
         {
@@ -559,7 +647,7 @@ public sealed class HarveyPanelService
         })
         {
             var key = tab.ToString();
-            vm.Tabs.Add(new HarveyPanelTabButtonViewModel
+            tabs.Add(new HarveyPanelTabButtonViewModel
             {
                 Key = key,
                 Label = label,
@@ -567,7 +655,7 @@ public sealed class HarveyPanelService
             });
         }
 
-        vm.SelectTab(selectedKey);
+        vm.InitializeTabs(tabs, selectedKey);
     }
 }
 
