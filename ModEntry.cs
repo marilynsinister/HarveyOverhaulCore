@@ -153,7 +153,8 @@ public sealed class ModEntry : Mod
         }
 
         Monitor.Log($"[HarveyOverhaul.Core] Opening Harvey panel: {tab}.", LogLevel.Debug);
-        _panelMenu.TryOpen(_panelService, tab, _config.DebugMode);
+        // Отладочный подвал в окне не показываем — диагностика пишется в консоль SMAPI (см. выше).
+        _panelMenu.TryOpen(_panelService, tab, debugMode: false);
         Helper.Input.SuppressActiveKeybinds(_config.OpenHarveyPanel);
     }
 

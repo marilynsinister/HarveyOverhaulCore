@@ -239,7 +239,8 @@ internal static class HarveyPlanUiBuilder
         return sections;
     }
 
-    private const string Legend = "✓ сделано   • нужно сделать   ⚠ под угрозой   ✗ нарушено";
+    // Шрифт Stardew не содержит ✓ • ⚠ ✗ — все они рисовались одинаковым «※». Только ASCII.
+    private const string Legend = "+ сделано    - нужно сделать    ! под угрозой    x нарушено";
 
     private static HarveyPanelSectionViewModel BuildHeaderSection(HarveyPlanSnapshot snapshot)
     {
@@ -291,7 +292,7 @@ internal static class HarveyPlanUiBuilder
             .ToList();
 
         if (reasons.Count > 0)
-            return "Почему Харви составил план:\n" + string.Join("\n", reasons.Select(r => $"• {r}"));
+            return "Почему Харви составил план:\n" + string.Join("\n", reasons.Select(r => $"- {r}"));
 
         bool injury = snapshot.AllDirectives.Any(d =>
             d.Source is HarveyCareDirectiveSource.Injury or HarveyCareDirectiveSource.Mixed
@@ -364,7 +365,7 @@ internal static class HarveyPlanUiBuilder
     {
         // Игроку — обычный список состояний без технических полей; подробности — в консольном дампе плана.
         var lines = snapshot.AllRawFacts
-            .Select(f => string.IsNullOrWhiteSpace(f.Details) ? $"• {f.Label}" : $"• {f.Label}\n   {f.Details.Trim()}")
+            .Select(f => string.IsNullOrWhiteSpace(f.Details) ? $"- {f.Label}" : $"• {f.Label}\n   {f.Details.Trim()}")
             .Distinct()
             .ToList();
 
@@ -473,10 +474,10 @@ internal static class HarveyPlanUiBuilder
     {
         string mark = d.State switch
         {
-            HarveyCareDirectiveState.Done => "✓",
-            HarveyCareDirectiveState.Failed => "✗",
-            HarveyCareDirectiveState.Warning => "⚠",
-            _ => number > 0 ? $"{number}." : "•",
+            HarveyCareDirectiveState.Done => "+",
+            HarveyCareDirectiveState.Failed => "x",
+            HarveyCareDirectiveState.Warning => "!",
+            _ => number > 0 ? $"{number}." : "-",
         };
 
         var line = new StringBuilder();

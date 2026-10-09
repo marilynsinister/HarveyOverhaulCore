@@ -12,29 +12,37 @@
       margin="0,0,0,14"
       text={Title} />
 
+    <!-- Вкладки — кнопки на nine-slice спрайтах. Стандартный <tab> рисует TabTopEmpty фиксированной
+         ширины (~64px) и не растягивается: подписи вылезали за дугу и переносились («Травм-ы»). -->
     <lane orientation="horizontal"
-          layout="stretch 54px"
-          z-index="1"
-          margin="0,0,0,14"
+          layout="stretch content"
+          margin="0,0,0,16"
           horizontal-content-alignment="middle">
-      <!-- У <tab> нет свойства margin — отступ между вкладками задаёт обёртка. -->
-      <frame *repeat={Tabs} margin="0,5,0,0">
-        <tab layout="128px 48px"
-             active={Active}
-             activate=|^SelectTab(Key)|>
-          <label font="small"
-                 text={Label}
-                 color={TabTextColor}
-                 layout="stretch stretch"
-                 horizontal-alignment="middle" />
-        </tab>
-      </frame>
+      <panel *repeat={Tabs} margin="4,0,4,0">
+        <frame *if={Active}
+               layout="160px 56px"
+               background={@Mods/StardewUI/Sprites/ButtonLight}
+               horizontal-content-alignment="middle"
+               vertical-content-alignment="middle"
+               focusable="true"
+               left-click=|^SelectTab(Key)|>
+          <label font="small" text={Label} color={TabTextColor} max-lines="1" />
+        </frame>
+        <frame *!if={Active}
+               layout="160px 56px"
+               background={@Mods/StardewUI/Sprites/ButtonDark}
+               opacity="0.8"
+               horizontal-content-alignment="middle"
+               vertical-content-alignment="middle"
+               focusable="true"
+               left-click=|^SelectTab(Key)|>
+          <label font="small" text={Label} color={TabTextColor} max-lines="1" />
+        </frame>
+      </panel>
     </lane>
 
-    <label font="dialogue" text={ActiveTabTitle} layout="stretch content" margin="0,0,0,12" />
-
     <scrollable layout="stretch stretch" peeking="32">
-      <lane orientation="vertical" layout="stretch content" padding="0,16,0,0">
+      <lane orientation="vertical" layout="stretch content" padding="0,8,16,0">
         <label *if={ShowPlanTabContent} font="small" text={PlanDetailBody} layout="stretch content" margin="0,0,12,12" />
 
         <frame *repeat={ActiveSections}
@@ -135,8 +143,7 @@
 
     <lane orientation="vertical" layout="stretch content" margin="0,0,18,0" padding="8,8,0,0">
       <label *if={HasPlanAdvice} font="small" text="Совет Харви:" color="#7f6139" margin="0,0,0,6" />
-      <label *if={HasPlanAdvice} font="small" text={HarveyAdviceText} layout="stretch content" margin="0,0,0,8" />
-      <label *if={ShowDebugFooter} font="small" text={DebugFooterText} layout="stretch content" color="#6b6b6b" margin="0,8,0,0" />
+      <label *if={HasPlanAdvice} font="small" text={HarveyAdviceText} layout="stretch content" max-lines="3" margin="0,0,0,8" />
     </lane>
   </lane>
 </frame>
