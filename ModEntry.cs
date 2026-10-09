@@ -135,17 +135,22 @@ public sealed class ModEntry : Mod
         }
 
         var tab = _panelService.ResolveDefaultTab();
-        var (snapshot, fallbackReason) = _panelService.BuildPlanOpenContext();
-        var preview = _panelService.BuildViewModel(tab, _config.DebugMode);
-        int planSectionCount = preview.ActiveSections.Count;
-        HarveyPlanDiagnostics.LogOpenPlan(
-            Monitor,
-            _providerRegistry,
-            _directiveRegistry,
-            snapshot,
-            fallbackReason,
-            tab,
-            planSectionCount);
+
+        // Подробный дамп плана в консоль — только в DebugMode (раньше десятки Info-строк на каждое открытие).
+        // Вручную: команда дампа плана в консоли SMAPI.
+        if (_config.DebugMode)
+        {
+            var (snapshot, fallbackReason) = _panelService.BuildPlanOpenContext();
+            var preview = _panelService.BuildViewModel(tab, debugMode: true);
+            HarveyPlanDiagnostics.LogOpenPlan(
+                Monitor,
+                _providerRegistry,
+                _directiveRegistry,
+                snapshot,
+                fallbackReason,
+                tab,
+                preview.ActiveSections.Count);
+        }
 
         Monitor.Log($"[HarveyOverhaul.Core] Opening Harvey panel: {tab}.", LogLevel.Debug);
         _panelMenu.TryOpen(_panelService, tab, _config.DebugMode);

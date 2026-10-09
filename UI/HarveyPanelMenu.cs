@@ -160,13 +160,13 @@ public sealed class HarveyPanelMenu
 
             _monitor.Log(
                 $"[HarveyPanel] ViewModel created. Tabs={viewModel.Tabs.Count}, Sections={viewModel.ActiveSections.Count}, Tab={viewModel.SelectedTabKey}",
-                LogLevel.Info);
+                LogLevel.Trace);
 
             foreach (var section in viewModel.ActiveSections)
             {
                 _monitor.Log(
                     $"[HarveyPanel] Section: headline='{section.Headline}', status='{section.StatusLine}', bodyLen={section.BodyText.Length}",
-                    LogLevel.Info);
+                    LogLevel.Trace);
             }
 
             foreach (var tabButton in viewModel.Tabs)

@@ -25,7 +25,7 @@ internal static class HarveyPlanUiBuilder
             return HarveyPanelTexts.Overview.CalmAdvice;
 
         if (snapshot.RawFactsCount > 0 && !snapshot.HasAnyContent)
-            return BuildMappingDiagnosticBody(snapshot);
+            return BuildMappingDiagnosticSections(snapshot)[0].BodyText;
 
         return BuildFullPlanBody(snapshot);
     }
@@ -362,50 +362,25 @@ internal static class HarveyPlanUiBuilder
 
     private static List<HarveyPanelSectionViewModel> BuildMappingDiagnosticSections(HarveyPlanSnapshot snapshot)
     {
+        // Игроку — обычный список состояний без технических полей; подробности — в консольном дампе плана.
+        var lines = snapshot.AllRawFacts
+            .Select(f => string.IsNullOrWhiteSpace(f.Details) ? $"• {f.Label}" : $"• {f.Label}\n   {f.Details.Trim()}")
+            .Distinct()
+            .ToList();
+
         return
         [
             new HarveyPanelSectionViewModel
             {
-                Headline = "Диагностика плана",
-                StatusLine = "Core получил состояния, но не смог превратить их в указания",
-                BodyText = BuildMappingDiagnosticBody(snapshot),
-                AccentColor = "#8b4513",
-                StatusColor = "#8b4513",
+                Headline = snapshot.Title,
+                StatusLine = "Харви присматривает за твоим состоянием",
+                BodyText = lines.Count > 0
+                    ? string.Join("\n", lines) + "\n\nЕсли что-то понадобится, Харви скажет сам — загляни к нему в клинику."
+                    : HarveyPanelTexts.Overview.CalmAdvice,
             },
         ];
     }
 
-    private static string BuildMappingDiagnosticBody(HarveyPlanSnapshot snapshot)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("Core получил состояния, но не смог превратить их в указания.");
-        sb.AppendLine();
-        sb.AppendLine("Сырые состояния:");
-
-        foreach (var fact in snapshot.AllRawFacts)
-        {
-            sb.Append("• [");
-            sb.Append(fact.Source);
-            sb.Append("] ");
-            sb.Append(fact.Label);
-            sb.Append(" — ");
-            sb.Append(fact.State);
-
-            string progress = FormatRawProgress(fact);
-            if (!string.IsNullOrWhiteSpace(progress))
-            {
-                sb.Append(' ');
-                sb.Append(progress);
-            }
-
-            sb.AppendLine();
-
-            if (!string.IsNullOrWhiteSpace(fact.Details))
-                sb.AppendLine($"  {fact.Details.Trim()}");
-        }
-
-        return sb.ToString().TrimEnd();
-    }
 
     /// <summary>Текстовая версия плана — те же секции, что и в окне (один источник правды).</summary>
     private static string BuildFullPlanBody(HarveyPlanSnapshot snapshot)

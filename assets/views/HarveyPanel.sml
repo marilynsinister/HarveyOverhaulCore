@@ -17,17 +17,18 @@
           z-index="1"
           margin="0,0,0,14"
           horizontal-content-alignment="middle">
-      <tab *repeat={Tabs}
-           layout="128px 48px"
-           margin="0,5,0,0"
-           active={Active}
-           activate=|^SelectTab(Key)|>
-        <label font="small"
-               text={Label}
-               color={TabTextColor}
-               layout="stretch stretch"
-               horizontal-alignment="middle" />
-      </tab>
+      <!-- У <tab> нет свойства margin — отступ между вкладками задаёт обёртка. -->
+      <frame *repeat={Tabs} margin="0,5,0,0">
+        <tab layout="128px 48px"
+             active={Active}
+             activate=|^SelectTab(Key)|>
+          <label font="small"
+                 text={Label}
+                 color={TabTextColor}
+                 layout="stretch stretch"
+                 horizontal-alignment="middle" />
+        </tab>
+      </frame>
     </lane>
 
     <label font="dialogue" text={ActiveTabTitle} layout="stretch content" margin="0,0,0,12" />
