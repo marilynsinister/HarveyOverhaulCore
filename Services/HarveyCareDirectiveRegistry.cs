@@ -95,6 +95,24 @@ public sealed class HarveyCareDirectiveRegistry
         return (injury, stress);
     }
 
+    public IReadOnlyList<HarveyCareRawFact> CollectRawFacts(string providerId)
+    {
+        var provider = GetProviders().FirstOrDefault(p =>
+            string.Equals(p.ProviderId, providerId, StringComparison.Ordinal));
+        if (provider == null)
+            return Array.Empty<HarveyCareRawFact>();
+
+        try
+        {
+            return provider.GetRawCareFacts() ?? (IReadOnlyList<HarveyCareRawFact>)Array.Empty<HarveyCareRawFact>();
+        }
+        catch (Exception ex)
+        {
+            _monitor.Log($"Raw fact provider '{providerId}' threw: {ex}", LogLevel.Error);
+            return Array.Empty<HarveyCareRawFact>();
+        }
+    }
+
     public (List<HarveyCareRawFact> Injury, List<HarveyCareRawFact> Stress) CollectRawFacts()
     {
         var injury = new List<HarveyCareRawFact>();

@@ -57,6 +57,8 @@ public sealed class HarveyMedicalIntentResolution
     public HarveyMedicalIntentRegistration? Selected { get; init; }
     public IReadOnlyList<HarveyMedicalIntentRejection> Rejected { get; init; } = Array.Empty<HarveyMedicalIntentRejection>();
     public bool FestivalBlockedLongTreatment { get; init; }
+    /// <summary>Интент, который выиграл бы без фестиваля (его провайдер ставит defer-тему).</summary>
+    public HarveyMedicalIntentRegistration? FestivalBlockedIntent { get; init; }
     public string? ActiveFestivalDeferTopicKey { get; init; }
     public int ResolvedAtTick { get; init; }
 }

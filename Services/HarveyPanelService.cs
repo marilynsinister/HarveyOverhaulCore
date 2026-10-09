@@ -38,7 +38,15 @@ public sealed class HarveyPanelService
 
     public bool HasPriorityHarveyInteraction()
     {
-        if (_planAdvisor.BuildSnapshot().AllDirectives.Count > 0)
+        // Приоритет — только когда Харви действительно ждёт игрока: визит, срочное действие или сорванный план.
+        // Обычные правила дня («лечь вовремя», «мягкий контакт») домашние реплики не блокируют.
+        bool needsHarvey = _planAdvisor.BuildSnapshot().AllDirectives.Any(d =>
+            (d.Type == HarveyCareDirectiveType.Appointment && d.State == HarveyCareDirectiveState.Active)
+            || (d.Type == HarveyCareDirectiveType.ImmediateAction
+                && d.State is HarveyCareDirectiveState.Active or HarveyCareDirectiveState.Warning
+                && d.Priority is HarveyCareDirectivePriority.High or HarveyCareDirectivePriority.Critical)
+            || d.State == HarveyCareDirectiveState.Failed);
+        if (needsHarvey)
             return true;
 
         return _registry.CollectContributions().Any(c =>
@@ -46,6 +54,14 @@ public sealed class HarveyPanelService
             || c.HasPriorityAppointment
             || c.HasActiveRecoveryPlan);
     }
+
+    /// <summary>Вкладки «Стресс»/«Травмы» видны, только если соответствующий мод зарегистрирован в Core.</summary>
+    public bool IsTabAvailable(HarveyPanelTab tab) => tab switch
+    {
+        HarveyPanelTab.Stress => _registry.IsRegistered(HarveyProviderRegistry.StressProviderId),
+        HarveyPanelTab.Injuries => _registry.IsRegistered(HarveyProviderRegistry.InjuryProviderId),
+        _ => true,
+    };
 
     public HarveyPanelTab ResolveDefaultTab()
     {
@@ -106,7 +122,10 @@ public sealed class HarveyPanelService
             BuildTabTitles(),
             BuildAdviceByTab(contributions, overview, planSnapshot));
 
-        InitializeTabs(vm, selectedTab);
+        if (!IsTabAvailable(selectedTab))
+            selectedTab = HarveyPanelTab.Overview;
+
+        InitializeTabs(vm, selectedTab, IsTabAvailable);
         return vm;
     }
 
@@ -632,7 +651,7 @@ public sealed class HarveyPanelService
             yield return section.Body;
     }
 
-    private static void InitializeTabs(HarveyPanelViewModel vm, HarveyPanelTab selectedTab)
+    private static void InitializeTabs(HarveyPanelViewModel vm, HarveyPanelTab selectedTab, Func<HarveyPanelTab, bool> isAvailable)
     {
         var selectedKey = selectedTab.ToString();
         var tabs = new List<HarveyPanelTabButtonViewModel>();
@@ -646,6 +665,9 @@ public sealed class HarveyPanelService
             (HarveyPanelTab.Trust, HarveyPanelTexts.Tabs.Trust),
         })
         {
+            if (!isAvailable(tab))
+                continue;
+
             var key = tab.ToString();
             tabs.Add(new HarveyPanelTabButtonViewModel
             {

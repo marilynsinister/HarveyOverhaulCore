@@ -100,6 +100,10 @@ public sealed class ModEntry : Mod
         if (!_config.OpenHarveyPanel.JustPressed())
             return;
 
+        // Буква H в чате мультиплеера не должна открывать окно.
+        if (Game1.chatBox?.isActive() == true)
+            return;
+
         Monitor.Log("[HarveyOverhaul.Core] H pressed.", LogLevel.Debug);
 
         if (GameStateGuard.IsEventActive())
@@ -192,7 +196,8 @@ public sealed class ModEntry : Mod
         if (!TryIsHarveyAtTile(loc, tile))
             return;
 
-        var resolution = _coreApi.PrepareHarveyMedicalClick(logDetails: true);
+        // Подробный лог пишут Injury/Stress в своих обработчиках клика — здесь только синхронизация тем.
+        _coreApi.PrepareHarveyMedicalClick(logDetails: false);
     }
 
     private static bool TryIsHarveyAtTile(GameLocation loc, Microsoft.Xna.Framework.Vector2 tile)

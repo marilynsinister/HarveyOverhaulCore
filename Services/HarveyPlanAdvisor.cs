@@ -1,3 +1,4 @@
+using HarveyOverhaul.Core.Core;
 using HarveyOverhaul.Core.Models;
 
 namespace HarveyOverhaul.Core.Services;
@@ -32,6 +33,7 @@ public sealed class HarveyPlanAdvisor
         var (injuryRawFacts, stressRawFacts) = _registry.CollectRawFacts();
         var (injuryDirectives, stressDirectives) = _registry.CollectDirectives();
         var merged = MergeAndDedupe(injuryDirectives, stressDirectives);
+        string tone = CalculateTone(merged);
 
         var snapshot = new HarveyPlanSnapshot
         {
@@ -42,8 +44,8 @@ public sealed class HarveyPlanAdvisor
             InjuryDirectiveCount = injuryDirectives.Count,
             StressDirectiveCount = stressDirectives.Count,
             AllDirectives = merged,
-            Tone = CalculateTone(merged),
-            ToneText = BuildToneText(CalculateTone(merged)),
+            Tone = tone,
+            ToneText = BuildToneText(tone, merged),
             HarveyAdvice = SelectHarveyAdvice(merged),
             PrimaryAction = GetPrimaryDirective(merged),
             ImmediateActions = FilterByType(merged, HarveyCareDirectiveType.ImmediateAction),
@@ -132,12 +134,77 @@ public sealed class HarveyPlanAdvisor
             }
         }
 
-        return byId.Values
+        return MergeSameRules(byId.Values)
             .OrderBy(d => HarveyCareDirectivePriority.Rank(d.Priority))
             .ThenBy(d => TypeOrder(d.Type))
             .ThenBy(d => d.Title, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
+
+    /// <summary>
+    /// Одинаковые правила от Injury и Stress («Не ходи в шахту», «Лечь спать вовремя») показываются один раз.
+    /// Appointment/ImmediateAction не склеиваются: у них разные поводы идти к Харви.
+    /// </summary>
+    private static List<HarveyCareDirective> MergeSameRules(IEnumerable<HarveyCareDirective> directives)
+    {
+        var result = new List<HarveyCareDirective>();
+        foreach (var group in directives.GroupBy(
+                     d => d.Type is HarveyCareDirectiveType.TodayRule or HarveyCareDirectiveType.Avoid
+                         ? $"{d.Type}|{d.Title.Trim().ToLowerInvariant()}"
+                         : $"id|{d.Id}",
+                     StringComparer.Ordinal))
+        {
+            var items = group.ToList();
+            if (items.Count == 1)
+            {
+                result.Add(items[0]);
+                continue;
+            }
+
+            var main = items
+                .OrderBy(d => HarveyCareDirectivePriority.Rank(d.Priority))
+                .ThenBy(d => StateUrgency(d.State))
+                .First();
+
+            result.Add(new HarveyCareDirective
+            {
+                Id = main.Id,
+                Source = items.Select(d => d.Source).Distinct().Count() > 1 ? HarveyCareDirectiveSource.Mixed : main.Source,
+                Type = main.Type,
+                Title = main.Title,
+                Text = main.Text,
+                Current = main.Current,
+                Goal = main.Goal,
+                Unit = main.Unit,
+                Priority = main.Priority,
+                // Правило выполнено, только если выполнено для всех источников.
+                State = items.Select(d => d.State).OrderBy(StateUrgency).First(),
+                CanFailDay = items.Any(d => d.CanFailDay),
+                FailureText = items.Select(d => d.FailureText).FirstOrDefault(t => !string.IsNullOrWhiteSpace(t)) ?? "",
+                HarveyTone = main.HarveyTone,
+                HarveyAdvice = items.Select(d => d.HarveyAdvice).FirstOrDefault(t => !string.IsNullOrWhiteSpace(t)) ?? "",
+                // Одно правило по двум поводам (травма + стресс): показываем обе причины.
+                Reason = string.Join(
+                    " ",
+                    items.Select(d => d.Reason?.Trim() ?? "")
+                        .Where(t => t.Length > 0)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)),
+                NextStep = main.NextStep,
+            });
+        }
+
+        return result;
+    }
+
+    /// <summary>Меньше — важнее показать: невыполненное правило важнее выполненного.</summary>
+    private static int StateUrgency(string state) => state switch
+    {
+        HarveyCareDirectiveState.Failed => 0,
+        HarveyCareDirectiveState.Warning => 1,
+        HarveyCareDirectiveState.Active => 2,
+        HarveyCareDirectiveState.Done => 3,
+        _ => 4,
+    };
 
     private static int TypeOrder(string type) => type switch
     {
@@ -152,19 +219,13 @@ public sealed class HarveyPlanAdvisor
 
     private static HarveyCareDirective? GetPrimaryDirective(IReadOnlyList<HarveyCareDirective> merged)
     {
+        // Срочный визит к Харви (Critical) важнее обычного действия (High): решает приоритет, тип — только при равенстве.
         var candidate = merged
-            .Where(d => d.Type == HarveyCareDirectiveType.ImmediateAction)
-            .Where(d => d.State is HarveyCareDirectiveState.Active or HarveyCareDirectiveState.Warning)
+            .Where(d => (d.Type == HarveyCareDirectiveType.ImmediateAction
+                         && d.State is HarveyCareDirectiveState.Active or HarveyCareDirectiveState.Warning)
+                        || (d.Type == HarveyCareDirectiveType.Appointment && d.State == HarveyCareDirectiveState.Active))
             .OrderBy(d => HarveyCareDirectivePriority.Rank(d.Priority))
-            .FirstOrDefault();
-
-        if (candidate != null)
-            return candidate;
-
-        candidate = merged
-            .Where(d => d.Type == HarveyCareDirectiveType.Appointment)
-            .Where(d => d.State == HarveyCareDirectiveState.Active)
-            .OrderBy(d => HarveyCareDirectivePriority.Rank(d.Priority))
+            .ThenBy(d => d.Type == HarveyCareDirectiveType.ImmediateAction ? 0 : 1)
             .FirstOrDefault();
 
         if (candidate != null)
@@ -211,20 +272,32 @@ public sealed class HarveyPlanAdvisor
         return HarveyCareDirectiveTone.Calm;
     }
 
-    private static string BuildToneText(string tone) => tone switch
+    /// <summary>Текст тона зависит от причины: нарушение плана ≠ срочное состояние ≠ просто высокий приоритет.</summary>
+    private static string BuildToneText(string tone, IReadOnlyList<HarveyCareDirective> merged)
     {
-        HarveyCareDirectiveTone.Soft =>
-            "Харви спокоен. Сегодня ты бережёшь себя, и это заметно.",
-        HarveyCareDirectiveTone.Calm =>
-            "Харви наблюдает за режимом. Пока всё под контролем.",
-        HarveyCareDirectiveTone.Worried =>
-            "Харви тревожится. Есть риск сорвать лечение, но день ещё можно спасти.",
-        HarveyCareDirectiveTone.Strict =>
-            "Харви строг. Ты рисковала здоровьем, и он обязательно поговорит с тобой.",
-        HarveyCareDirectiveTone.Tender =>
-            "Харви рядом. Сейчас главное — не геройствовать и дать себе восстановиться.",
-        _ => "Харви наблюдает за режимом. Пока всё под контролем.",
-    };
+        bool planFailed = merged.Any(d => d.State == HarveyCareDirectiveState.Failed);
+        bool hasWarning = merged.Any(d => d.State == HarveyCareDirectiveState.Warning
+            || (d.Type == HarveyCareDirectiveType.Warning && d.State != HarveyCareDirectiveState.Info));
+
+        return tone switch
+        {
+            HarveyCareDirectiveTone.Soft =>
+                "Харви спокоен. Сегодня ты бережёшь себя, и это заметно.",
+            HarveyCareDirectiveTone.Calm =>
+                "Харви наблюдает за режимом. Пока всё под контролем.",
+            HarveyCareDirectiveTone.Worried when hasWarning =>
+                "Харви тревожится. Есть риск сорвать лечение, но день ещё можно спасти.",
+            HarveyCareDirectiveTone.Worried =>
+                "Харви беспокоится. Не откладывай то, о чём он просил.",
+            HarveyCareDirectiveTone.Strict when planFailed =>
+                $"Харви строг. План сегодня нарушен: ты {PlayerGrammar.Gendered("рисковал", "рисковала")} здоровьем, и он обязательно поговорит с тобой.",
+            HarveyCareDirectiveTone.Strict =>
+                "Харви очень встревожен. Сначала сделай то, что он просил, — это срочно.",
+            HarveyCareDirectiveTone.Tender =>
+                "Харви рядом. Сейчас главное — не геройствовать и дать себе восстановиться.",
+            _ => "Харви наблюдает за режимом. Пока всё под контролем.",
+        };
+    }
 
     private static string SelectHarveyAdvice(IReadOnlyList<HarveyCareDirective> merged)
     {
@@ -241,7 +314,7 @@ public sealed class HarveyPlanAdvisor
             var appointment = merged.FirstOrDefault(d =>
                 d.Type == HarveyCareDirectiveType.Appointment && d.State == HarveyCareDirectiveState.Active);
             if (appointment != null && !string.Equals(appointment.Id, primary.Id, StringComparison.OrdinalIgnoreCase))
-                return $"Сначала {primary.Title.ToLowerInvariant()}. Потом {appointment.Title.ToLowerInvariant()}.";
+                return $"Сначала {PlayerGrammar.LowerFirst(primary.Title)}. Потом {PlayerGrammar.LowerFirst(appointment.Title)}.";
         }
 
         return "";
@@ -260,8 +333,8 @@ public sealed class HarveyPlanAdvisor
 
     private static List<HarveyCareDirective> GetWarnings(IReadOnlyList<HarveyCareDirective> merged)
         => merged
-            .Where(d => d.Type == HarveyCareDirectiveType.Warning
-                || (d.State == HarveyCareDirectiveState.Warning && d.Type != HarveyCareDirectiveType.FailureReason))
+            // Правила в состоянии Warning остаются в своих блоках с пометкой ⚠ — не дублируем их здесь.
+            .Where(d => d.Type == HarveyCareDirectiveType.Warning && d.State != HarveyCareDirectiveState.Info)
             .OrderBy(d => HarveyCareDirectivePriority.Rank(d.Priority))
             .ToList();
 
@@ -276,8 +349,10 @@ public sealed class HarveyPlanAdvisor
             .ToList();
 
     private static List<HarveyCareDirective> GetMedicalNotes(IReadOnlyList<HarveyCareDirective> merged)
-        => merged
-            .Where(d => d.Source == HarveyCareDirectiveSource.Injury)
+    {
+        var primary = GetPrimaryDirective(merged);
+        return merged
+            .Where(d => d.Source is HarveyCareDirectiveSource.Injury or HarveyCareDirectiveSource.Mixed)
             .Where(d => d.Type == HarveyCareDirectiveType.Advice
                 || d.Type == HarveyCareDirectiveType.Appointment
                 || d.Id.StartsWith("injury.", StringComparison.OrdinalIgnoreCase))
@@ -286,11 +361,12 @@ public sealed class HarveyPlanAdvisor
                 && d.Type != HarveyCareDirectiveType.ImmediateAction
                 && d.Type != HarveyCareDirectiveType.Warning
                 && d.Type != HarveyCareDirectiveType.FailureReason)
-            .Where(d => !ReferenceEquals(d, GetPrimaryDirective(merged)))
+            .Where(d => !ReferenceEquals(d, primary))
             .GroupBy(d => d.Id, StringComparer.OrdinalIgnoreCase)
             .Select(g => g.First())
             .OrderBy(d => HarveyCareDirectivePriority.Rank(d.Priority))
             .ToList();
+    }
 
     private static List<HarveyCareDirective> GetStressNotes(IReadOnlyList<HarveyCareDirective> merged)
         => merged
@@ -301,9 +377,6 @@ public sealed class HarveyPlanAdvisor
                 && d.Type != HarveyCareDirectiveType.Warning
                 && d.Type != HarveyCareDirectiveType.FailureReason
                 && d.Type != HarveyCareDirectiveType.Appointment)
-            .Concat(merged.Where(d =>
-                d.Source == HarveyCareDirectiveSource.Stress
-                && d.Type == HarveyCareDirectiveType.TodayRule))
             .GroupBy(d => d.Id, StringComparer.OrdinalIgnoreCase)
             .Select(g => g.First())
             .OrderBy(d => HarveyCareDirectivePriority.Rank(d.Priority))

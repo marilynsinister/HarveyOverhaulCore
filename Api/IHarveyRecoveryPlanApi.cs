@@ -2,7 +2,7 @@ namespace HarveyOverhaul.Core.Api;
 
 /// <summary>
 /// API единого «Плана Харви» (save-state в Injury mod).
-/// Stress/Injury вызывают через ModRegistry.GetApi.
+/// Injury регистрирует реализацию в Core (RegisterRecoveryPlanApi), Stress получает её через IHarveyCoreApi.GetRecoveryPlanApi().
 /// </summary>
 public interface IHarveyRecoveryPlanApi
 {

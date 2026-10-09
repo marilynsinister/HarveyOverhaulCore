@@ -20,6 +20,12 @@ public sealed class HarveyCareDirective
 
     public string HarveyTone { get; set; } = HarveyCareDirectiveTone.Calm;
     public string HarveyAdvice { get; set; } = "";
+
+    /// <summary>Почему Харви это назначил — причина простыми словами («Ты три дня ложишься после полуночи»).</summary>
+    public string Reason { get; set; } = "";
+
+    /// <summary>Что произойдёт / что делать после выполнения пункта. Пусто — Core подставит общий текст по типу.</summary>
+    public string NextStep { get; set; } = "";
 }
 
 public static class HarveyCareDirectiveSource

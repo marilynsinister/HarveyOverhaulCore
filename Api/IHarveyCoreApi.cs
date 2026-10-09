@@ -10,6 +10,20 @@ public interface IHarveyCoreApi
     void RegisterCareDirectiveProvider(IHarveyCareDirectiveProvider provider);
     void UnregisterCareDirectiveProvider(string providerId);
 
+    /// <summary>Сырые факты конкретного провайдера (Injury/Stress читают состояние друг друга только через Core).</summary>
+    IReadOnlyList<HarveyCareRawFact> GetCareFacts(string providerId);
+
+    /// <summary>Есть ли у провайдера активные (не Done/Info) факты ухода.</summary>
+    bool HasActiveCareState(string providerId);
+
+    /// <summary>Единый RecoveryPlan (save-state владеет Injury). Регистрирует владелец, остальные получают через Core.</summary>
+    void RegisterRecoveryPlanApi(IHarveyRecoveryPlanApi api);
+    IHarveyRecoveryPlanApi? GetRecoveryPlanApi();
+
+    /// <summary>Состояния стресса (владеет Stress). Регистрирует Stress, остальные получают через Core.</summary>
+    void RegisterStressStateApi(IHarveyStressStateApi api);
+    IHarveyStressStateApi? GetStressStateApi();
+
     void OpenPanel(HarveyPanelTab tab = HarveyPanelTab.Overview);
     void ClosePanel();
     bool IsPanelOpen { get; }

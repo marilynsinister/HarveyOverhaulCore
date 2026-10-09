@@ -151,37 +151,34 @@ public sealed class HarveyMedicalIntentArbitrator
             eligible.Add(intent);
         }
 
-        HarveyMedicalIntentRegistration? selected = eligible
-            .OrderByDescending(i => i.BasePriority)
-            .ThenByDescending(i => i.DangerRank)
-            .ThenByDescending(i => i.IsPhaseReady)
-            .ThenByDescending(i => i.StateAgeTicks)
-            .ThenBy(i => i.ProviderId, StringComparer.Ordinal)
-            .FirstOrDefault();
+        HarveyMedicalIntentRegistration? selected = OrderByUrgency(eligible).FirstOrDefault();
 
+        // Фестиваль: долгое лечение откладывается. Победитель запоминается (для темы «после фестиваля»),
+        // а говорить Харви будет о самом срочном из того, что на фестивале допустимо.
         bool festivalBlocked = context.IsFestival
             && _settings.BlockLongTreatmentDuringFestivals
             && selected != null
-            && !selected.AllowDuringFestival
-            && !selected.IsEmergency;
+            && !IsAllowedDuringFestival(selected);
 
+        HarveyMedicalIntentRegistration? festivalBlockedIntent = null;
         string? festivalDeferTopic = null;
         if (festivalBlocked && selected != null)
         {
+            festivalBlockedIntent = selected;
             festivalDeferTopic = selected.FestivalDeferTopicKey;
-            rejected.Add(new HarveyMedicalIntentRejection
+
+            foreach (var blocked in eligible.Where(i => !IsAllowedDuringFestival(i)))
             {
-                Intent = selected,
-                Reason = "festival: long treatment blocked — defer topic",
-            });
+                rejected.Add(new HarveyMedicalIntentRejection
+                {
+                    Intent = blocked,
+                    Reason = ReferenceEquals(blocked, selected)
+                        ? "festival: long treatment blocked — defer topic"
+                        : "festival blocks long treatment",
+                });
+            }
 
-            var emergency = eligible
-                .Where(i => i.IsEmergency && i.AllowDuringFestival)
-                .OrderByDescending(i => i.BasePriority)
-                .ThenByDescending(i => i.DangerRank)
-                .FirstOrDefault();
-
-            selected = emergency;
+            selected = OrderByUrgency(eligible.Where(IsAllowedDuringFestival)).FirstOrDefault();
         }
 
         var resolution = new HarveyMedicalIntentResolution
@@ -189,6 +186,7 @@ public sealed class HarveyMedicalIntentArbitrator
             Selected = selected,
             Rejected = rejected,
             FestivalBlockedLongTreatment = festivalBlocked,
+            FestivalBlockedIntent = festivalBlockedIntent,
             ActiveFestivalDeferTopicKey = festivalDeferTopic,
             ResolvedAtTick = Context.IsWorldReady ? Game1.ticks : 0,
         };
@@ -281,17 +279,21 @@ public sealed class HarveyMedicalIntentArbitrator
             return false;
         }
 
-        if (context.IsFestival && _settings.BlockLongTreatmentDuringFestivals)
-        {
-            if (!intent.AllowDuringFestival && !intent.IsEmergency)
-            {
-                reason = "festival blocks long treatment";
-                return false;
-            }
-        }
-
+        // Фестиваль здесь не фильтруем: блокировку и defer-тему решает Resolve после выбора победителя.
         return true;
     }
+
+    private static bool IsAllowedDuringFestival(HarveyMedicalIntentRegistration intent)
+        => intent.AllowDuringFestival || intent.IsEmergency;
+
+    private static IEnumerable<HarveyMedicalIntentRegistration> OrderByUrgency(
+        IEnumerable<HarveyMedicalIntentRegistration> intents)
+        => intents
+            .OrderByDescending(i => i.BasePriority)
+            .ThenByDescending(i => i.DangerRank)
+            .ThenByDescending(i => i.IsPhaseReady)
+            .ThenByDescending(i => i.StateAgeTicks)
+            .ThenBy(i => i.ProviderId, StringComparer.Ordinal);
 
     private void LogResolution(HarveyMedicalIntentResolution resolution)
     {

@@ -1,4 +1,5 @@
 using System.Text;
+using HarveyOverhaul.Core.Core;
 using HarveyOverhaul.Core.Models;
 using HarveyOverhaul.Core.UI;
 
@@ -63,33 +64,44 @@ internal static class HarveyPlanUiBuilder
             ?? snapshot.FailureReasons.FirstOrDefault(r => r.State == HarveyCareDirectiveState.Warning)
             ?? snapshot.PrimaryAction;
 
-        int assignmentCount = snapshot.ImmediateActions.Count
-            + snapshot.TodayRules.Count
-            + snapshot.AvoidRules.Count
-            + snapshot.StressNotes.Count;
-        if (assignmentCount == 0 && snapshot.AllDirectives.Count > 0)
-            assignmentCount = snapshot.AllDirectives.Count;
+        // Считаем только невыполненные назначения, каждое один раз (включая визиты к Харви).
+        int assignmentCount = snapshot.AllDirectives
+            .Where(d => d.State is HarveyCareDirectiveState.Active or HarveyCareDirectiveState.Warning or HarveyCareDirectiveState.Failed)
+            .Where(d => d.Type is not (HarveyCareDirectiveType.Advice or HarveyCareDirectiveType.FailureReason or HarveyCareDirectiveType.Warning))
+            .Select(d => d.Id)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
 
+        var shown = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var bodyParts = new List<string>();
-        if (snapshot.PrimaryAction != null)
-            bodyParts.Add(FormatDirective(snapshot.PrimaryAction));
+        void AddPart(HarveyCareDirective d)
+        {
+            if (shown.Add(d.Id))
+                bodyParts.Add(FormatDirective(d));
+        }
 
-        foreach (var rule in snapshot.TodayRules.Take(3))
-            bodyParts.Add(FormatDirective(rule));
+        if (snapshot.PrimaryAction != null)
+            AddPart(snapshot.PrimaryAction);
+
+        foreach (var rule in snapshot.TodayRules.Where(r => r.State != HarveyCareDirectiveState.Done).Take(3))
+            AddPart(rule);
 
         foreach (var rule in snapshot.StressNotes.Take(2))
-            bodyParts.Add(FormatDirective(rule));
+            AddPart(rule);
 
         if (bodyParts.Count == 0)
         {
             foreach (var warning in snapshot.Warnings.Take(2))
-                bodyParts.Add(FormatDirective(warning));
+                AddPart(warning);
         }
+
+        if (bodyParts.Count > 0)
+            bodyParts.Add("Почему это нужно и что делать дальше — во вкладке «План».");
 
         return new HarveyPanelSectionViewModel
         {
             Headline = $"Активных назначений: {assignmentCount}",
-            StatusLine = urgent != null ? $"Срочно: {urgent.Title.ToLowerInvariant()}" : "",
+            StatusLine = urgent != null ? $"Срочно: {PlayerGrammar.LowerFirst(urgent.Title)}" : "",
             BodyText = string.Join("\n\n", bodyParts.Where(part => !string.IsNullOrWhiteSpace(part))),
             AccentColor = urgent != null ? "#8b4513" : "#3b2a1a",
             StatusColor = urgent != null ? "#8b4513" : "#7f6139",
@@ -160,53 +172,192 @@ internal static class HarveyPlanUiBuilder
         return sb.ToString().TrimEnd();
     }
 
+    /// <summary>
+    /// Вкладка «План» читается сверху вниз как инструкция:
+    /// почему есть план → что сделать сейчас → что потом → режим дня → запреты → что пошло не так → что будет дальше.
+    /// Каждый пункт показывается один раз; последствия нарушения — прямо в пункте, а не отдельным дублирующим блоком.
+    /// </summary>
     private static List<HarveyPanelSectionViewModel> BuildFullPlanSections(HarveyPlanSnapshot snapshot)
     {
-        var sections = new List<HarveyPanelSectionViewModel>();
+        var sections = new List<HarveyPanelSectionViewModel> { BuildHeaderSection(snapshot) };
+        var shown = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Провалы — первыми после шапки: игрок должен сразу понять, что случилось и как это исправить.
+        var failed = Unshown(snapshot.AllDirectives.Where(d => d.State == HarveyCareDirectiveState.Failed), shown);
+        AddDirectiveSectionIfAny(
+            sections,
+            "Что пошло не так",
+            failed,
+            status: "Сегодняшний день лечения не засчитан",
+            accent: "#8b4513");
+
+        var now = Unshown(BuildNowList(snapshot), shown);
+        if (now.Count > 0)
+        {
+            AddDirectiveSectionIfAny(
+                sections,
+                "Шаг 1 — сделай сейчас",
+                [now[0]],
+                status: StepStatus(now[0]),
+                accent: now[0].Priority == HarveyCareDirectivePriority.Critical ? "#8b4513" : "#3b2a1a");
+        }
+
+        var later = now.Skip(1).Concat(Unshown(GetAppointments(snapshot), shown)).ToList();
+        AddDirectiveSectionIfAny(
+            sections,
+            now.Count > 0 ? "Шаг 2 — затем" : "Шаг 1 — визит к Харви",
+            later,
+            status: later.Count > 1 ? "По порядку, сверху вниз" : "",
+            numbered: later.Count > 1);
+
+        var rules = Unshown(snapshot.TodayRules, shown);
+        AddDirectiveSectionIfAny(sections, "Режим на сегодня", rules, status: ProgressStatus(rules));
+
+        var avoid = Unshown(snapshot.AvoidRules, shown);
+        AddDirectiveSectionIfAny(sections, "Сегодня нельзя", avoid, status: avoid.Count > 0 ? "Нарушение сорвёт день лечения" : "");
+
+        // Невыполненные задания плана, которые сорвут день, если не успеть до сна.
+        var pending = Unshown(snapshot.FailureReasons, shown);
+        AddDirectiveSectionIfAny(sections, "Успей до конца дня", pending, status: "Иначе день не засчитается");
+
+        AddDirectiveSectionIfAny(sections, "Предупреждения", Unshown(snapshot.Warnings, shown));
+        AddDirectiveSectionIfAny(sections, "Травмы и лечение", Unshown(snapshot.MedicalNotes, shown));
+        AddDirectiveSectionIfAny(sections, "Стресс и безопасность", Unshown(snapshot.StressNotes, shown));
+
+        var infoDirectives = snapshot.AllDirectives
+            .Where(d => d.Type == HarveyCareDirectiveType.Advice || d.State == HarveyCareDirectiveState.Info);
+        AddDirectiveSectionIfAny(sections, "Дополнительно", Unshown(infoDirectives, shown));
 
         sections.Add(new HarveyPanelSectionViewModel
         {
-            Headline = snapshot.Title,
-            StatusLine = ToneHeadline(snapshot.Tone),
-            BodyText = snapshot.ToneText,
-            AccentColor = MapToneAccent(snapshot.Tone),
-            StatusColor = MapToneStatus(snapshot.Tone),
+            Headline = "Что будет дальше",
+            BodyText = BuildWhatNext(snapshot),
+            AccentColor = "#2e6b2e",
         });
 
-        var immediate = snapshot.ImmediateActions
-            .Where(d => d.State is HarveyCareDirectiveState.Active or HarveyCareDirectiveState.Warning)
-            .ToList();
-        if (immediate.Count > 0)
-            AddDirectiveSection(sections, "Что сделать сейчас", immediate);
-        else if (snapshot.PrimaryAction != null)
-            AddDirectiveSection(sections, "Что сделать сейчас", [snapshot.PrimaryAction]);
+        // «Совет Харви» вкладки «План» показывается в подвале окна (adviceByTab), отдельной секцией не дублируем.
+        return sections;
+    }
 
-        AddDirectiveSectionIfAny(sections, "Назначения на сегодня", snapshot.TodayRules);
-        AddDirectiveSectionIfAny(sections, "Чего избегать", snapshot.AvoidRules);
-        AddDirectiveSectionIfAny(sections, "Предупреждения", snapshot.Warnings);
-        AddDirectiveSectionIfAny(sections, "Почему день может сорваться", snapshot.FailureReasons, useFailureText: true);
-        AddDirectiveSectionIfAny(sections, "Травмы и лечение", snapshot.MedicalNotes);
-        AddDirectiveSectionIfAny(sections, "Стресс и безопасность", snapshot.StressNotes);
+    private const string Legend = "✓ сделано   • нужно сделать   ⚠ под угрозой   ✗ нарушено";
 
-        var infoDirectives = snapshot.AllDirectives
-            .Where(d => d.Type == HarveyCareDirectiveType.Advice || d.State == HarveyCareDirectiveState.Info)
-            .Where(d => !snapshot.MedicalNotes.Any(m => string.Equals(m.Id, d.Id, StringComparison.OrdinalIgnoreCase)))
-            .Where(d => !snapshot.StressNotes.Any(m => string.Equals(m.Id, d.Id, StringComparison.OrdinalIgnoreCase)))
-            .ToList();
-        AddDirectiveSectionIfAny(sections, "Дополнительно", infoDirectives);
+    private static HarveyPanelSectionViewModel BuildHeaderSection(HarveyPlanSnapshot snapshot)
+    {
+        var actionable = GetActionable(snapshot);
+        int done = actionable.Count(d => d.State == HarveyCareDirectiveState.Done);
 
-        if (!string.IsNullOrWhiteSpace(snapshot.HarveyAdvice))
+        string status = ToneHeadline(snapshot.Tone);
+        if (actionable.Count > 0)
+            status += $" · выполнено {done} из {actionable.Count}";
+
+        var body = new StringBuilder();
+        body.AppendLine(snapshot.ToneText);
+        body.AppendLine();
+        body.AppendLine(BuildWhySummary(snapshot));
+        body.AppendLine();
+        body.Append(Legend);
+
+        return new HarveyPanelSectionViewModel
         {
-            sections.Add(new HarveyPanelSectionViewModel
-            {
-                Headline = "Совет Харви",
-                BodyText = $"«{snapshot.HarveyAdvice}»",
-                AccentColor = "#3b2a1a",
-                StatusColor = "#7f6139",
-            });
+            Headline = snapshot.Title,
+            StatusLine = status,
+            BodyText = body.ToString(),
+            AccentColor = MapToneAccent(snapshot.Tone),
+            StatusColor = MapToneStatus(snapshot.Tone),
+        };
+    }
+
+    /// <summary>Пункты, у которых есть результат «сделано/не сделано» (без советов и справочных строк).</summary>
+    private static List<HarveyCareDirective> GetActionable(HarveyPlanSnapshot snapshot)
+        => snapshot.AllDirectives
+            .Where(d => d.Type is HarveyCareDirectiveType.ImmediateAction
+                or HarveyCareDirectiveType.Appointment
+                or HarveyCareDirectiveType.TodayRule
+                or HarveyCareDirectiveType.Avoid)
+            .Where(d => d.State != HarveyCareDirectiveState.Info)
+            .GroupBy(d => d.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .ToList();
+
+    /// <summary>«Почему Харви составил план»: причины от модов, иначе — общая формулировка по источникам.</summary>
+    private static string BuildWhySummary(HarveyPlanSnapshot snapshot)
+    {
+        var reasons = snapshot.AllDirectives
+            .Where(d => d.State != HarveyCareDirectiveState.Done)
+            .Select(d => d.Reason?.Trim() ?? "")
+            .Where(r => r.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(4)
+            .ToList();
+
+        if (reasons.Count > 0)
+            return "Почему Харви составил план:\n" + string.Join("\n", reasons.Select(r => $"• {r}"));
+
+        bool injury = snapshot.AllDirectives.Any(d =>
+            d.Source is HarveyCareDirectiveSource.Injury or HarveyCareDirectiveSource.Mixed
+            && d.State != HarveyCareDirectiveState.Done);
+        bool stress = snapshot.AllDirectives.Any(d =>
+            d.Source is HarveyCareDirectiveSource.Stress or HarveyCareDirectiveSource.Mixed
+            && d.State != HarveyCareDirectiveState.Done);
+
+        return (injury, stress) switch
+        {
+            (true, true) => "Почему Харви составил план: травма ещё заживает, а стресс мешает восстановлению.",
+            (true, false) => "Почему Харви составил план: травма ещё заживает, ей нужен режим.",
+            (false, true) => "Почему Харви составил план: накопился стресс, ему нужно время и забота.",
+            _ => "Почему Харви составил план: он хочет убедиться, что ты восстанавливаешься.",
+        };
+    }
+
+    /// <summary>Объяснение, чем закончится день и что делать после выполнения пунктов.</summary>
+    private static string BuildWhatNext(HarveyPlanSnapshot snapshot)
+    {
+        if (snapshot.AllDirectives.Any(d => d.State == HarveyCareDirectiveState.Failed))
+        {
+            return "Сегодня план нарушен, и этот день лечения не засчитается — восстановление может затянуться.\n" +
+                   "Поговори с Харви: он объяснит, чем это опасно, и скорректирует план. Завтра можно продолжить.";
         }
 
-        return sections;
+        bool hasAppointment = snapshot.AllDirectives.Any(d =>
+            d.Type == HarveyCareDirectiveType.Appointment && d.State == HarveyCareDirectiveState.Active);
+        bool hasOpenSteps = snapshot.AllDirectives.Any(d =>
+            d.Type == HarveyCareDirectiveType.ImmediateAction
+            && d.State is HarveyCareDirectiveState.Active or HarveyCareDirectiveState.Warning);
+        bool hasRules = snapshot.AllDirectives.Any(d =>
+            d.Type is HarveyCareDirectiveType.TodayRule or HarveyCareDirectiveType.Avoid
+            && d.State is HarveyCareDirectiveState.Active or HarveyCareDirectiveState.Warning);
+
+        var lines = new List<string>();
+        if (hasOpenSteps)
+            lines.Add("Выполни шаги по порядку — прогресс обновляется сам, план можно открыть снова в любой момент.");
+        if (hasAppointment)
+            lines.Add("Затем найди Харви и поговори с ним: днём он обычно в клинике. Он проверит состояние и обновит план.");
+        if (hasRules)
+            lines.Add("Соблюдай режим до сна: день восстановления засчитывается в конце дня, когда ты ложишься спать.");
+
+        if (lines.Count == 0)
+            lines.Add("На сегодня всё выполнено. Отдыхай — Харви сам скажет, если понадобится осмотр.");
+
+        return string.Join("\n", lines);
+    }
+
+    private static string StepStatus(HarveyCareDirective d) => d.Type switch
+    {
+        HarveyCareDirectiveType.Appointment => d.Priority == HarveyCareDirectivePriority.Critical
+            ? "Срочно к Харви"
+            : "Нужен разговор с Харви",
+        _ => d.Priority == HarveyCareDirectivePriority.Critical ? "Срочно" : "Самое важное сейчас",
+    };
+
+    private static string ProgressStatus(IReadOnlyList<HarveyCareDirective> items)
+    {
+        if (items.Count == 0)
+            return "";
+
+        int done = items.Count(d => d.State == HarveyCareDirectiveState.Done);
+        return done == items.Count
+            ? "Всё соблюдено"
+            : $"Соблюдено {done} из {items.Count} — засчитается к концу дня";
     }
 
     private static List<HarveyPanelSectionViewModel> BuildMappingDiagnosticSections(HarveyPlanSnapshot snapshot)
@@ -256,21 +407,21 @@ internal static class HarveyPlanUiBuilder
         return sb.ToString().TrimEnd();
     }
 
+    /// <summary>Текстовая версия плана — те же секции, что и в окне (один источник правды).</summary>
     private static string BuildFullPlanBody(HarveyPlanSnapshot snapshot)
     {
         var sb = new StringBuilder();
-        sb.AppendLine(ToneHeadline(snapshot.Tone));
-        sb.AppendLine(snapshot.ToneText);
-
-        AppendBodyBlock(sb, "Что сделать сейчас", snapshot.PrimaryAction != null
-            ? [snapshot.PrimaryAction]
-            : snapshot.ImmediateActions);
-        AppendBodyBlock(sb, "Назначения на сегодня", snapshot.TodayRules);
-        AppendBodyBlock(sb, "Чего избегать", snapshot.AvoidRules);
-        AppendBodyBlock(sb, "Предупреждения", snapshot.Warnings);
-        AppendBodyBlock(sb, "Почему день может сорваться", snapshot.FailureReasons, useFailureText: true);
-        AppendBodyBlock(sb, "Травмы и лечение", snapshot.MedicalNotes);
-        AppendBodyBlock(sb, "Стресс и безопасность", snapshot.StressNotes);
+        foreach (var section in BuildFullPlanSections(snapshot))
+        {
+            if (sb.Length > 0)
+                sb.AppendLine();
+            if (section.HasHeadline)
+                sb.AppendLine(section.Headline);
+            if (section.HasStatusLine)
+                sb.AppendLine(section.StatusLine);
+            if (section.HasBodyText)
+                sb.AppendLine(section.BodyText);
+        }
 
         if (!string.IsNullOrWhiteSpace(snapshot.HarveyAdvice))
         {
@@ -281,6 +432,28 @@ internal static class HarveyPlanUiBuilder
 
         return sb.ToString().TrimEnd();
     }
+
+    /// <summary>Главное действие первым, затем остальные активные срочные действия.</summary>
+    private static List<HarveyCareDirective> BuildNowList(HarveyPlanSnapshot snapshot)
+    {
+        var list = new List<HarveyCareDirective>();
+        if (snapshot.PrimaryAction != null)
+            list.Add(snapshot.PrimaryAction);
+
+        list.AddRange(snapshot.ImmediateActions
+            .Where(d => d.State is HarveyCareDirectiveState.Active or HarveyCareDirectiveState.Warning));
+        return list;
+    }
+
+    /// <summary>Все активные визиты к Харви — и травмы, и стресс (раньше стресс-визиты терялись, если не были главными).</summary>
+    private static List<HarveyCareDirective> GetAppointments(HarveyPlanSnapshot snapshot)
+        => snapshot.AllDirectives
+            .Where(d => d.Type == HarveyCareDirectiveType.Appointment && d.State == HarveyCareDirectiveState.Active)
+            .OrderBy(d => HarveyCareDirectivePriority.Rank(d.Priority))
+            .ToList();
+
+    private static List<HarveyCareDirective> Unshown(IEnumerable<HarveyCareDirective> directives, HashSet<string> shown)
+        => directives.Where(d => shown.Add(d.Id)).ToList();
 
     private static HarveyPanelSectionViewModel BuildEmptyPlanSection()
         => new()
@@ -293,61 +466,48 @@ internal static class HarveyPlanUiBuilder
         List<HarveyPanelSectionViewModel> sections,
         string headline,
         IReadOnlyList<HarveyCareDirective> directives,
-        bool useFailureText = false)
+        string status = "",
+        string? accent = null,
+        bool numbered = false)
     {
         if (directives.Count == 0)
             return;
 
-        AddDirectiveSection(sections, headline, directives, useFailureText);
-    }
+        var items = directives
+            .Select((d, i) => FormatDirective(d, detailed: true, number: numbered ? i + 1 : 0))
+            .ToList();
 
-    private static void AddDirectiveSection(
-        List<HarveyPanelSectionViewModel> sections,
-        string headline,
-        IReadOnlyList<HarveyCareDirective> directives,
-        bool useFailureText = false)
-    {
         sections.Add(new HarveyPanelSectionViewModel
         {
             Headline = headline,
-            BodyText = string.Join("\n\n", directives.Select(d => FormatDirective(d, useFailureText))),
-            AccentColor = directives.Any(d => d.Priority == HarveyCareDirectivePriority.Critical)
+            StatusLine = status,
+            BodyText = string.Join("\n\n", items),
+            AccentColor = accent
+                ?? (directives.Any(d => d.Priority == HarveyCareDirectivePriority.Critical) ? "#8b4513" : "#3b2a1a"),
+            StatusColor = directives.Any(d => d.State is HarveyCareDirectiveState.Failed or HarveyCareDirectiveState.Warning)
                 ? "#8b4513"
-                : "#3b2a1a",
-            StatusColor = directives.Any(d => d.Priority == HarveyCareDirectivePriority.High)
-                ? "#7f6139"
                 : "#7f6139",
         });
     }
 
-    private static void AppendBodyBlock(
-        StringBuilder sb,
-        string headline,
-        IReadOnlyList<HarveyCareDirective> directives,
-        bool useFailureText = false)
-    {
-        if (directives.Count == 0)
-            return;
-
-        sb.AppendLine();
-        sb.AppendLine(headline);
-        foreach (var directive in directives)
-            sb.AppendLine(FormatDirective(directive, useFailureText));
-    }
-
-    private static string FormatDirective(HarveyCareDirective d, bool useFailureText = false)
+    /// <summary>
+    /// Пункт плана. Подробный вид отвечает на три вопроса игрока:
+    /// что сделать (заголовок + прогресс), почему (Reason) и что дальше / чем грозит нарушение.
+    /// </summary>
+    private static string FormatDirective(HarveyCareDirective d, bool detailed = false, int number = 0)
     {
         string mark = d.State switch
         {
-            HarveyCareDirectiveState.Done => "✓ ",
-            HarveyCareDirectiveState.Failed => "✗ ",
-            HarveyCareDirectiveState.Warning => "⚠ ",
-            _ => "• ",
+            HarveyCareDirectiveState.Done => "✓",
+            HarveyCareDirectiveState.Failed => "✗",
+            HarveyCareDirectiveState.Warning => "⚠",
+            _ => number > 0 ? $"{number}." : "•",
         };
 
         var line = new StringBuilder();
         line.Append(mark);
-        line.Append(d.Title);
+        line.Append(' ');
+        line.Append(d.Title.TrimEnd('.'));
 
         string progress = FormatProgress(d);
         if (!string.IsNullOrWhiteSpace(progress))
@@ -356,20 +516,76 @@ internal static class HarveyPlanUiBuilder
         if (d.State == HarveyCareDirectiveState.Done)
             line.Append(" — выполнено");
 
-        line.Append('.');
+        AppendDetail(line, null, d.Text);
 
-        string detail = useFailureText && !string.IsNullOrWhiteSpace(d.FailureText)
-            ? d.FailureText
-            : d.Text;
+        if (!detailed || d.State == HarveyCareDirectiveState.Done)
+            return line.ToString().TrimEnd();
 
-        if (!string.IsNullOrWhiteSpace(detail))
-        {
-            line.AppendLine();
-            line.Append("  ");
-            line.Append(detail.Trim());
-        }
+        AppendDetail(line, "Почему:", d.Reason);
+
+        string remaining = FormatRemaining(d);
+        if (!string.IsNullOrWhiteSpace(remaining))
+            AppendDetail(line, "Осталось:", remaining);
+
+        if (!string.IsNullOrWhiteSpace(d.FailureText) && d.State != HarveyCareDirectiveState.Failed)
+            AppendDetail(line, "Риск:", FormatFailureRisk(d.FailureText));
+
+        AppendDetail(line, "Дальше:", ResolveNextStep(d));
 
         return line.ToString().TrimEnd();
+    }
+
+    private static void AppendDetail(StringBuilder line, string? label, string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return;
+
+        line.AppendLine();
+        line.Append("   ");
+        if (label != null)
+        {
+            line.Append(label);
+            line.Append(' ');
+        }
+
+        line.Append(PlayerGrammar.UpperFirst(text.Trim()));
+    }
+
+    /// <summary>FailureText пишется провайдерами как «если ляжешь после полуночи» или «повязка промокла».</summary>
+    private static string FormatFailureRisk(string failureText)
+    {
+        string text = failureText.Trim().TrimEnd('.');
+        return text.StartsWith("если ", StringComparison.OrdinalIgnoreCase)
+            ? $"день лечения сорвётся, {text}."
+            : $"день лечения сорвётся — {PlayerGrammar.LowerFirst(text)}.";
+    }
+
+    private static string FormatRemaining(HarveyCareDirective d)
+    {
+        if (d.Goal <= 0 || d.Current >= d.Goal)
+            return "";
+
+        int left = d.Goal - Math.Max(0, d.Current);
+        return string.IsNullOrWhiteSpace(d.Unit) ? left.ToString() : $"{left} {d.Unit}";
+    }
+
+    /// <summary>Следующий шаг от провайдера или общий по типу пункта.</summary>
+    private static string ResolveNextStep(HarveyCareDirective d)
+    {
+        if (!string.IsNullOrWhiteSpace(d.NextStep))
+            return d.NextStep;
+
+        if (d.State == HarveyCareDirectiveState.Failed)
+            return "поговори с Харви — он скорректирует план.";
+
+        return d.Type switch
+        {
+            HarveyCareDirectiveType.Appointment =>
+                "найди Харви и поговори с ним (днём он обычно в клинике).",
+            HarveyCareDirectiveType.ImmediateAction when d.Goal > 0 =>
+                "когда шкала заполнится, пункт отметится сам.",
+            _ => "",
+        };
     }
 
     private static string FormatProgress(HarveyCareDirective d)

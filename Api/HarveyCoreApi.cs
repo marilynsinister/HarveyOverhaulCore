@@ -14,6 +14,8 @@ public sealed class HarveyCoreApi : IHarveyCoreApi
     private readonly HarveyPanelService _panelService;
     private readonly HarveyMedicalIntentArbitrator _medicalIntentArbitrator;
     private readonly HarveyMedicalClickDiagnostics _clickDiagnostics;
+    private IHarveyRecoveryPlanApi? _recoveryPlanApi;
+    private IHarveyStressStateApi? _stressStateApi;
 
     public HarveyCoreApi(
         HarveyProviderRegistry registry,
@@ -44,6 +46,25 @@ public sealed class HarveyCoreApi : IHarveyCoreApi
 
     public void UnregisterCareDirectiveProvider(string providerId)
         => _directiveRegistry.Unregister(providerId);
+
+    public IReadOnlyList<HarveyCareRawFact> GetCareFacts(string providerId)
+        => _directiveRegistry.CollectRawFacts(providerId);
+
+    public bool HasActiveCareState(string providerId)
+        => _directiveRegistry.CollectRawFacts(providerId).Any(f =>
+            f.State is not (HarveyCareDirectiveState.Done or HarveyCareDirectiveState.Info));
+
+    public void RegisterRecoveryPlanApi(IHarveyRecoveryPlanApi api)
+        => _recoveryPlanApi = api ?? throw new ArgumentNullException(nameof(api));
+
+    public IHarveyRecoveryPlanApi? GetRecoveryPlanApi()
+        => _recoveryPlanApi;
+
+    public void RegisterStressStateApi(IHarveyStressStateApi api)
+        => _stressStateApi = api ?? throw new ArgumentNullException(nameof(api));
+
+    public IHarveyStressStateApi? GetStressStateApi()
+        => _stressStateApi;
 
     public void OpenPanel(HarveyPanelTab tab = HarveyPanelTab.Overview)
         => _panelMenu.OpenToTab(_panelService, tab);

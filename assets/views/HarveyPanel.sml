@@ -44,9 +44,9 @@
           padding="20,20,18,18"
           margin="0,0,0,12">
           <lane orientation="vertical" layout="stretch content">
-            <label font="dialogue" text={Headline} color={AccentColor} layout="stretch content" margin="0,0,0,6" />
-            <label font="small" text={StatusLine} layout="stretch content" color={StatusColor} margin="0,0,0,6" />
-            <label font="small" text={BodyText} layout="stretch content" margin="0,0,0,2" />
+            <label *if={HasHeadline} font="dialogue" text={Headline} color={AccentColor} layout="stretch content" margin="0,0,0,6" />
+            <label *if={HasStatusLine} font="small" text={StatusLine} layout="stretch content" color={StatusColor} margin="0,0,0,6" />
+            <label *if={HasBodyText} font="small" text={BodyText} layout="stretch content" margin="0,0,0,2" />
           </lane>
         </frame>
 
