@@ -26,7 +26,10 @@
                vertical-content-alignment="middle"
                focusable="true"
                left-click=|^SelectTab(Key)|>
-          <label font="small" text={Label} color={TabTextColor} max-lines="1" />
+          <lane orientation="horizontal" vertical-content-alignment="middle">
+            <image *if={HasTabIcon} layout="24px 24px" sprite={TabIcon} margin="0,0,6,0" />
+            <label font="small" text={Label} color={TabTextColor} max-lines="1" />
+          </lane>
         </frame>
         <frame *!if={Active}
                layout="160px 56px"
@@ -36,7 +39,10 @@
                vertical-content-alignment="middle"
                focusable="true"
                left-click=|^SelectTab(Key)|>
-          <label font="small" text={Label} color={TabTextColor} max-lines="1" />
+          <lane orientation="horizontal" vertical-content-alignment="middle">
+            <image *if={HasTabIcon} layout="24px 24px" sprite={TabIcon} margin="0,0,6,0" />
+            <label font="small" text={Label} color={TabTextColor} max-lines="1" />
+          </lane>
         </frame>
       </panel>
     </lane>
@@ -53,7 +59,10 @@
           padding="20,20,18,18"
           margin="0,0,0,12">
           <lane orientation="vertical" layout="stretch content">
-            <label *if={HasHeadline} font="dialogue" text={Headline} color={AccentColor} layout="stretch content" margin="0,0,0,6" />
+            <lane *if={HasHeadline} orientation="horizontal" layout="stretch content" vertical-content-alignment="middle" margin="0,0,0,6">
+              <image *if={HasIcon} layout="32px 32px" sprite={Icon} margin="0,0,10,0" />
+              <label font="dialogue" text={Headline} color={AccentColor} layout="stretch content" />
+            </lane>
             <label *if={HasStatusLine} font="small" text={StatusLine} layout="stretch content" color={StatusColor} margin="0,0,0,6" />
             <label *if={HasBodyText} font="small" text={BodyText} layout="stretch content" margin="0,0,0,2" />
           </lane>
@@ -142,8 +151,19 @@
     </scrollable>
 
     <lane orientation="vertical" layout="stretch content" margin="0,0,18,0" padding="8,8,0,0">
-      <label *if={HasPlanAdvice} font="small" text="Совет Харви:" color="#7f6139" margin="0,0,0,6" />
-      <label *if={HasPlanAdvice} font="small" text={HarveyAdviceText} layout="stretch content" max-lines="3" margin="0,0,0,8" />
+      <lane *if={HasPlanAdvice} orientation="horizontal" layout="stretch content" vertical-content-alignment="middle">
+        <frame *if={HasAdvicePortrait}
+               layout="56px 56px"
+               padding="4,4,4,4"
+               margin="0,0,12,0"
+               background={@Mods/StardewUI/Sprites/MenuSlotInset}>
+          <image layout="stretch stretch" sprite={AdvicePortrait} />
+        </frame>
+        <lane orientation="vertical" layout="stretch content">
+          <label font="small" text="Совет Харви:" color="#7f6139" margin="0,0,0,4" />
+          <label font="small" text={HarveyAdviceText} layout="stretch content" max-lines="3" />
+        </lane>
+      </lane>
     </lane>
   </lane>
 </frame>

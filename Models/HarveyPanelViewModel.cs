@@ -70,6 +70,10 @@ public sealed class HarveyPanelViewModel : INotifyPropertyChanged
 
     public bool HasPlanAdvice => !string.IsNullOrWhiteSpace(HarveyAdviceText);
 
+    /// <summary>Портрет Харви у «Совета Харви».</summary>
+    public StardewUI.Graphics.Sprite? AdvicePortrait => HarveyPanelIcons.HarveyPortrait();
+    public bool HasAdvicePortrait => HasPlanAdvice && AdvicePortrait != null;
+
     public string TrustLevelLine { get; init; } = "";
     public string TrustDescriptionLine { get; init; } = "";
     public string TrustPermissionsLine { get; init; } = "";
@@ -165,6 +169,9 @@ public sealed class HarveyPanelViewModel : INotifyPropertyChanged
             });
         }
 
+        foreach (var section in sections)
+            section.Icon ??= HarveyPanelIcons.ForSection(section.Headline, SelectedTabKey);
+
         ActiveSections = new ObservableCollection<HarveyPanelSectionViewModel>(sections);
         OnPropertyChanged(nameof(ActiveSections));
 
@@ -177,6 +184,7 @@ public sealed class HarveyPanelViewModel : INotifyPropertyChanged
             : OverviewAdviceLine;
 
         OnPropertyChanged(nameof(HasPlanAdvice));
+        OnPropertyChanged(nameof(HasAdvicePortrait));
 
         ShowPlanTabContent = string.Equals(SelectedTabKey, nameof(HarveyPanelTab.Plan), StringComparison.Ordinal)
             && !string.IsNullOrWhiteSpace(PlanDetailBody)

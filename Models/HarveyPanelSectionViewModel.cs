@@ -1,3 +1,5 @@
+using StardewUI.Graphics;
+
 namespace HarveyOverhaul.Core.Models;
 
 public sealed class HarveyPanelSectionViewModel
@@ -11,4 +13,8 @@ public sealed class HarveyPanelSectionViewModel
     public bool HasHeadline => !string.IsNullOrWhiteSpace(Headline);
     public bool HasStatusLine => !string.IsNullOrWhiteSpace(StatusLine);
     public bool HasBodyText => !string.IsNullOrWhiteSpace(BodyText);
+
+    /// <summary>Иконка у заголовка секции (подбирается по смыслу заголовка при показе вкладки).</summary>
+    public Sprite? Icon { get; set; }
+    public bool HasIcon => Icon != null && HasHeadline;
 }

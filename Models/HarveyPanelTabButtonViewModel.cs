@@ -1,3 +1,5 @@
+using HarveyOverhaul.Core.UI;
+using StardewUI.Graphics;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
@@ -24,6 +26,10 @@ public sealed class HarveyPanelTabButtonViewModel : INotifyPropertyChanged
     }
 
     public string TabTextColor => Active ? "#3b2a1a" : "#6b5340";
+
+    /// <summary>Иконка вкладки рядом с подписью.</summary>
+    public Sprite? TabIcon => HarveyPanelIcons.ForTab(Key);
+    public bool HasTabIcon => TabIcon != null;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
