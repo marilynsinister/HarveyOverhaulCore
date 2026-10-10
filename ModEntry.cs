@@ -19,6 +19,7 @@ public sealed class ModEntry : Mod
     private HarveyPanelMenu _panelMenu = null!;
     private HarveyPanelService _panelService = null!;
     private HarveyMedicalIntentArbitrator _medicalIntentArbitrator = null!;
+    private HarveyMarriageMilestones _marriageMilestones = null!;
     private IModHelper _helper = null!;
 
     public override void Entry(IModHelper helper)
@@ -61,7 +62,10 @@ public sealed class ModEntry : Mod
             "Full dump: providers, raw facts, directives, sections, tone, fallback.",
             (_, __) => LogHarveyPlanDump(includeUiPreview: false));
 
+        _marriageMilestones = new HarveyMarriageMilestones(Monitor);
+
         helper.Events.GameLoop.GameLaunched += OnGameLaunched;
+        helper.Events.GameLoop.DayStarted += (_, _) => _marriageMilestones.OnDayStarted();
         helper.Events.Input.ButtonPressed += OnButtonPressed;
 
         helper.ConsoleCommands.Add(
@@ -82,6 +86,7 @@ public sealed class ModEntry : Mod
 
     private void OnGameLaunched(object? sender, GameLaunchedEventArgs e)
     {
+        HarveyModCompatibilityCheck.Run(Helper.ModRegistry, Monitor);
         _panelMenu.TryInitialize(Helper);
 
         if (_panelMenu.IsAvailable)
