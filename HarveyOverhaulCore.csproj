@@ -12,6 +12,7 @@
     <EnableModDeploy>true</EnableModDeploy>
     <EnableGameDebugging>true</EnableGameDebugging>
     <EnableModZip>false</EnableModZip>
+    <EnableHarmony>true</EnableHarmony>
     <GamePath>D:\Games\Steam\steamapps\common\Stardew Valley</GamePath>
     <GameModsPath>$(GamePath)\Mods\HarveyOverhaul</GameModsPath>
   </PropertyGroup>

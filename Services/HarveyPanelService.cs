@@ -1,4 +1,4 @@
-using HarveyOverhaul.Core.Models;
+﻿using HarveyOverhaul.Core.Models;
 using HarveyOverhaul.Core.UI;
 
 namespace HarveyOverhaul.Core.Services;
@@ -191,7 +191,7 @@ public sealed class HarveyPanelService
         PrependPlanSummary(sections, planSnapshot);
 
         if (sections.Count > 0)
-            return sections;
+            return HarveyTodayChecklist.AppendTo(sections);
 
         var result = new List<HarveyPanelSectionViewModel>();
 
@@ -220,7 +220,7 @@ public sealed class HarveyPanelService
             });
         }
 
-        return result;
+        return HarveyTodayChecklist.AppendTo(result);
     }
 
     private static IReadOnlyList<HarveyPanelSectionViewModel> BuildStressSections(

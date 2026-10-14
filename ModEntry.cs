@@ -66,6 +66,14 @@ public sealed class ModEntry : Mod
 
         helper.Events.GameLoop.GameLaunched += OnGameLaunched;
         helper.Events.GameLoop.DayStarted += (_, _) => _marriageMilestones.OnDayStarted();
+
+        HudMessageLimiter.Apply(new HarmonyLib.Harmony(ModManifest.UniqueID), Monitor);
+        helper.Events.GameLoop.OneSecondUpdateTicked += (_, _) => HudMessageLimiter.OnOneSecond();
+        helper.Events.GameLoop.DayStarted += (_, _) => HudMessageLimiter.OnDayStarted();
+
+        var topicResetter = new RepeatableTopicResetter(Monitor);
+        helper.Events.GameLoop.SaveLoaded += (_, _) => topicResetter.OnSaveLoaded();
+        helper.Events.GameLoop.UpdateTicked += (_, e) => topicResetter.OnUpdateTicked(e.Ticks);
         helper.Events.Input.ButtonPressed += OnButtonPressed;
 
         helper.ConsoleCommands.Add(
