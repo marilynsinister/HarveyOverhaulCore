@@ -47,7 +47,7 @@ public static class HarveyPanelIcons
         Sprite? sprite = null;
         try
         {
-            var texture = Game1.content.Load<Texture2D>("Portraits/Harvey");
+            var texture = PortraitureTexture() ?? Game1.content.Load<Texture2D>("Portraits/Harvey");
             // Портреты — сетка 2 колонки; HD-моды увеличивают размер, поэтому берём половину ширины.
             int size = texture.Width / 2;
             sprite = new Sprite(texture, new Rectangle(0, 0, size, size));
@@ -58,6 +58,46 @@ public static class HarveyPanelIcons
         }
 
         return sprite;
+    }
+
+    private static System.Reflection.MethodInfo? _portraitureGetPortrait;
+    private static bool _portraitureResolved;
+
+    /// <summary>
+    /// HD-портрет из активного пака Portraiture (с учётом локации/сезона: Harvey_Hospital, Harvey_Winter и вариантов PortraiturePlus).
+    /// Portraiture рисует поверх ванили в диалогах, но <c>Portraits/Harvey</c> не подменяет, поэтому спрашиваем его напрямую.
+    /// null — Portraiture нет, выбран ванильный пак или для Харви нет портрета.
+    /// </summary>
+    private static Texture2D? PortraitureTexture()
+    {
+        if (!_portraitureResolved)
+        {
+            _portraitureResolved = true;
+            var loader = AppDomain.CurrentDomain.GetAssemblies()
+                .FirstOrDefault(a => a.GetName().Name == "Portraiture")
+                ?.GetType("Portraiture.TextureLoader");
+            _portraitureGetPortrait = loader?.GetMethod(
+                "getPortrait",
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
+                null,
+                new[] { typeof(NPC), typeof(Texture2D) },
+                null);
+        }
+
+        if (_portraitureGetPortrait == null || Game1.currentLocation == null)
+            return null;
+
+        try
+        {
+            var harvey = Game1.getCharacterFromName("Harvey");
+            if (harvey == null)
+                return null;
+            return _portraitureGetPortrait.Invoke(null, new object?[] { harvey, harvey.Portrait }) as Texture2D;
+        }
+        catch
+        {
+            return null; // другая версия Portraiture — остаёмся на ванильном портрете
+        }
     }
 
     private static Sprite? Item(string qualifiedId)
