@@ -2,6 +2,7 @@ using System.Text;
 using HarveyOverhaul.Core.Core;
 using HarveyOverhaul.Core.Models;
 using HarveyOverhaul.Core.UI;
+using StardewUI.Graphics;
 
 namespace HarveyOverhaul.Core.Services;
 
@@ -74,10 +75,13 @@ internal static class HarveyPlanUiBuilder
 
         var shown = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var bodyParts = new List<string>();
+        var items = new List<HarveyPlanItemViewModel>();
         void AddPart(HarveyCareDirective d)
         {
-            if (shown.Add(d.Id))
-                bodyParts.Add(FormatDirective(d));
+            if (!shown.Add(d.Id))
+                return;
+            bodyParts.Add(FormatDirective(d));
+            items.Add(BuildItem(d, detailed: false));
         }
 
         if (snapshot.PrimaryAction != null)
@@ -95,14 +99,17 @@ internal static class HarveyPlanUiBuilder
                 AddPart(warning);
         }
 
+        const string footnote = "Почему это нужно и что делать дальше — во вкладке «План».";
         if (bodyParts.Count > 0)
-            bodyParts.Add("Почему это нужно и что делать дальше — во вкладке «План».");
+            bodyParts.Add(footnote);
 
         return new HarveyPanelSectionViewModel
         {
             Headline = $"Активных назначений: {assignmentCount}",
             StatusLine = urgent != null ? $"Срочно: {PlayerGrammar.LowerFirst(urgent.Title)}" : "",
             BodyText = string.Join("\n\n", bodyParts.Where(part => !string.IsNullOrWhiteSpace(part))),
+            Items = items,
+            Footnote = items.Count > 0 ? footnote : "",
             AccentColor = urgent != null ? "#8b4513" : "#3b2a1a",
             StatusColor = urgent != null ? "#8b4513" : "#7f6139",
         };
@@ -199,7 +206,8 @@ internal static class HarveyPlanUiBuilder
                 "Шаг 1 — сделай сейчас",
                 [now[0]],
                 status: StepStatus(now[0]),
-                accent: now[0].Priority == HarveyCareDirectivePriority.Critical ? "#8b4513" : "#3b2a1a");
+                accent: now[0].Priority == HarveyCareDirectivePriority.Critical ? "#8b4513" : "#3b2a1a",
+                expandFirst: true);
         }
 
         var later = now.Skip(1).Concat(Unshown(GetAppointments(snapshot), shown)).ToList();
@@ -239,32 +247,34 @@ internal static class HarveyPlanUiBuilder
         return sections;
     }
 
-    // Шрифт Stardew не содержит ✓ • ⚠ ✗ — все они рисовались одинаковым «※». Только ASCII.
-    private const string Legend = "+ сделано    - нужно сделать    ! под угрозой    x нарушено";
+    // Шрифт Stardew не содержит ✓ • ⚠ ✗ — все они рисовались одинаковым «※». В тексте только ASCII;
+    // в окне состояние пунктов показывают иконки (см. BuildItem), поэтому легенда не нужна.
 
     private static HarveyPanelSectionViewModel BuildHeaderSection(HarveyPlanSnapshot snapshot)
     {
         var actionable = GetActionable(snapshot);
         int done = actionable.Count(d => d.State == HarveyCareDirectiveState.Done);
 
-        string status = ToneHeadline(snapshot.Tone);
-        if (actionable.Count > 0)
-            status += $" · выполнено {done} из {actionable.Count}";
+        bool anyFailed = actionable.Any(d => d.State == HarveyCareDirectiveState.Failed);
 
         var body = new StringBuilder();
-        body.AppendLine(snapshot.ToneText);
-        body.AppendLine();
-        body.AppendLine(BuildWhySummary(snapshot));
-        body.AppendLine();
-        body.Append(Legend);
+        if (!string.IsNullOrWhiteSpace(snapshot.ToneText))
+        {
+            body.AppendLine(snapshot.ToneText);
+            body.AppendLine();
+        }
+        body.Append(BuildWhySummary(snapshot));
 
         return new HarveyPanelSectionViewModel
         {
             Headline = snapshot.Title,
-            StatusLine = status,
+            StatusLine = ToneHeadline(snapshot.Tone),
             BodyText = body.ToString(),
             AccentColor = MapToneAccent(snapshot.Tone),
             StatusColor = MapToneStatus(snapshot.Tone),
+            ProgressText = actionable.Count > 0 ? $"Выполнено {done} из {actionable.Count}" : "",
+            ProgressFraction = actionable.Count > 0 ? (float)done / actionable.Count : 0f,
+            ProgressColor = anyFailed ? HarveyPlanColors.Danger : HarveyPlanColors.Good,
         };
     }
 
@@ -365,7 +375,7 @@ internal static class HarveyPlanUiBuilder
     {
         // Игроку — обычный список состояний без технических полей; подробности — в консольном дампе плана.
         var lines = snapshot.AllRawFacts
-            .Select(f => string.IsNullOrWhiteSpace(f.Details) ? $"- {f.Label}" : $"• {f.Label}\n   {f.Details.Trim()}")
+            .Select(f => string.IsNullOrWhiteSpace(f.Details) ? $"- {f.Label}" : $"- {f.Label}\n   {f.Details.Trim()}")
             .Distinct()
             .ToList();
 
@@ -395,7 +405,9 @@ internal static class HarveyPlanUiBuilder
                 sb.AppendLine(section.Headline);
             if (section.HasStatusLine)
                 sb.AppendLine(section.StatusLine);
-            if (section.HasBodyText)
+            if (section.HasProgress)
+                sb.AppendLine(section.ProgressText);
+            if (!string.IsNullOrWhiteSpace(section.BodyText))
                 sb.AppendLine(section.BodyText);
         }
 
@@ -444,26 +456,104 @@ internal static class HarveyPlanUiBuilder
         IReadOnlyList<HarveyCareDirective> directives,
         string status = "",
         string? accent = null,
-        bool numbered = false)
+        bool numbered = false,
+        bool expandFirst = false)
     {
         if (directives.Count == 0)
             return;
 
-        var items = directives
+        var texts = directives
             .Select((d, i) => FormatDirective(d, detailed: true, number: numbered ? i + 1 : 0))
+            .ToList();
+
+        var items = directives
+            .Select((d, i) => BuildItem(
+                d,
+                detailed: true,
+                number: numbered ? i + 1 : 0,
+                expanded: (expandFirst && i == 0)
+                    || d.State is HarveyCareDirectiveState.Failed or HarveyCareDirectiveState.Warning))
             .ToList();
 
         sections.Add(new HarveyPanelSectionViewModel
         {
             Headline = headline,
             StatusLine = status,
-            BodyText = string.Join("\n\n", items),
+            BodyText = string.Join("\n\n", texts),
+            Items = items,
             AccentColor = accent
                 ?? (directives.Any(d => d.Priority == HarveyCareDirectivePriority.Critical) ? "#8b4513" : "#3b2a1a"),
             StatusColor = directives.Any(d => d.State is HarveyCareDirectiveState.Failed or HarveyCareDirectiveState.Warning)
                 ? "#8b4513"
                 : "#7f6139",
         });
+    }
+
+    /// <summary>
+    /// Пункт плана для окна: состояние — иконкой, прогресс — полоской, «Почему / Риск / Дальше» раскрываются по клику.
+    /// Выполненные пункты сворачиваются до одной приглушённой строки.
+    /// </summary>
+    private static HarveyPlanItemViewModel BuildItem(HarveyCareDirective d, bool detailed, int number = 0, bool expanded = false)
+    {
+        bool done = d.State == HarveyCareDirectiveState.Done;
+        bool failed = d.State == HarveyCareDirectiveState.Failed;
+        bool warning = d.State == HarveyCareDirectiveState.Warning;
+        bool info = d.State == HarveyCareDirectiveState.Info || d.Type == HarveyCareDirectiveType.Advice;
+
+        string title = d.Title.Trim().TrimEnd('.');
+        if (number > 0 && !done && !failed)
+            title = $"{number}. {title}";
+
+        (Sprite icon, string tint, string tooltip) = d.State switch
+        {
+            HarveyCareDirectiveState.Done => (UiSprites.CheckboxChecked, "#ffffff", "Выполнено"),
+            HarveyCareDirectiveState.Failed => (UiSprites.CloseButton, "#ffffff", "Нарушено — день лечения не засчитан"),
+            HarveyCareDirectiveState.Warning => (UiSprites.CheckboxUnchecked, "#f0a040", "Под угрозой"),
+            _ when info => (UiSprites.SmallRightArrow, "#c9a77a", "Для сведения"),
+            _ => (UiSprites.CheckboxUnchecked, "#ffffff", "Нужно сделать"),
+        };
+
+        string progressText = FormatProgress(d);
+        float fraction = d.Goal > 0 ? Math.Clamp((float)d.Current / d.Goal, 0f, 1f) : 0f;
+        string progressColor = failed ? HarveyPlanColors.Danger
+            : warning ? HarveyPlanColors.Warn
+            : HarveyPlanColors.Good;
+
+        string detailText = "";
+        string riskText = "";
+        if (detailed && !done)
+        {
+            var lines = new List<string>();
+            if (!string.IsNullOrWhiteSpace(d.Reason))
+                lines.Add($"Почему: {PlayerGrammar.UpperFirst(d.Reason.Trim())}");
+
+            string next = ResolveNextStep(d);
+            if (!string.IsNullOrWhiteSpace(next))
+                lines.Add($"Дальше: {PlayerGrammar.UpperFirst(next.Trim())}");
+
+            detailText = string.Join("\n", lines);
+
+            if (!string.IsNullOrWhiteSpace(d.FailureText) && !failed)
+                riskText = $"Риск: {PlayerGrammar.UpperFirst(FormatFailureRisk(d.FailureText))}";
+        }
+
+        return new HarveyPlanItemViewModel
+        {
+            Title = done ? $"{title} — выполнено" : title,
+            TitleColor = done ? HarveyPlanColors.Faded
+                : failed ? HarveyPlanColors.Danger
+                : HarveyPlanColors.Text,
+            Subtitle = done ? "" : PlayerGrammar.UpperFirst(d.Text?.Trim()),
+            StateIcon = icon,
+            StateTint = tint,
+            StateTooltip = tooltip,
+            ProgressText = done ? "" : progressText,
+            ProgressFraction = fraction,
+            ProgressColor = progressColor,
+            DetailText = detailText,
+            RiskText = riskText,
+            Expanded = expanded,
+        };
     }
 
     /// <summary>

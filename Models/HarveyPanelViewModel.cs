@@ -44,7 +44,11 @@ public sealed class HarveyPanelViewModel : INotifyPropertyChanged
 
     public HandbookViewModel Handbook { get; init; } = new();
 
-    public bool ShowStressHandbook => string.Equals(SelectedTabKey, nameof(HarveyPanelTab.Stress), StringComparison.Ordinal);
+    /// <summary>Справочник состояний — своя вкладка (раньше висел под назначением во вкладке «Стресс»).</summary>
+    public bool ShowStressHandbook => string.Equals(SelectedTabKey, nameof(HarveyPanelTab.Handbook), StringComparison.Ordinal);
+
+    /// <summary>Размер окна под экран (HarveyPanelLayout).</summary>
+    public StardewUI.Layout.LayoutParameters PanelLayout { get; set; } = StardewUI.Layout.LayoutParameters.FixedSize(1040, 760);
 
     public string OverviewStateLine { get; init; } = "";
     public string OverviewAssignmentLine { get; init; } = "";

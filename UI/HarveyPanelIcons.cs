@@ -19,6 +19,8 @@ public static class HarveyPanelIcons
         "Injuries" => Item("(O)351"),    // мышечный бальзам
         "Plan" => Item("(O)102"),        // потерянная книга — журнал
         "Trust" => Item("(O)458"),       // букет
+        "Handbook" => Item("(O)326"),    // книга-справочник
+        "Story" => Item("(O)402"),       // душистый горошек — память о сценах
         _ => null,
     };
 

@@ -1,5 +1,6 @@
 using HarveyOverhaul.Core.UI;
 using StardewUI.Graphics;
+using StardewUI.Layout;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
@@ -29,7 +30,13 @@ public sealed class HarveyPanelTabButtonViewModel : INotifyPropertyChanged
 
     /// <summary>Иконка вкладки рядом с подписью.</summary>
     public Sprite? TabIcon => HarveyPanelIcons.ForTab(Key);
-    public bool HasTabIcon => TabIcon != null;
+    public bool HasTabIcon => ShowIcon && TabIcon != null;
+
+    /// <summary>Узкие вкладки (маленький экран) — без иконок. Ставит HarveyPanelLayout.</summary>
+    public bool ShowIcon { get; set; } = true;
+
+    /// <summary>Размер кнопки вкладки — зависит от ширины окна и числа вкладок.</summary>
+    public LayoutParameters ButtonLayout { get; set; } = LayoutParameters.FixedSize(160, 56);
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

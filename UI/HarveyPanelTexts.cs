@@ -24,6 +24,8 @@ internal static class HarveyPanelTexts
         public const string Injuries = "Травмы";
         public const string Plan = "План";
         public const string Trust = "Доверие";
+        public const string Handbook = "Справочник";
+        public const string Story = "История";
     }
 
     public static class Overview
@@ -61,7 +63,7 @@ internal static class HarveyPanelTexts
     public static class Stress
     {
         public const string NoAssignment =
-            "Сейчас нет срочного назначения. Ниже — что Харви обычно советует при стрессе.";
+            "Сейчас нет срочного назначения. Что Харви советует при стрессе — во вкладке «Справочник».";
 
         public const string ProgressPrefix = "Осталось:";
 

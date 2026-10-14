@@ -31,7 +31,16 @@ public sealed class ModEntry : Mod
         var gameStateGuard = new GameStateGuard();
         _panelMenu = new HarveyPanelMenu(Monitor);
         var planAdvisor = new HarveyPlanAdvisor(_directiveRegistry);
-        _panelService = new HarveyPanelService(_providerRegistry, planAdvisor);
+        var storyJournal = new HarveyStoryJournal(Monitor);
+        _panelService = new HarveyPanelService(_providerRegistry, planAdvisor, storyJournal);
+        _panelService.RefreshRequested = tab => _panelMenu.OpenToTab(_panelService, tab);
+        helper.Events.GameLoop.DayStarted += (_, _) => storyJournal.OnDayStarted();
+        // Пустой журнал сцен; записи добавляет Harvey Overhaul [CP] (assets/Code/storyJournal.json) через EditData.
+        helper.Events.Content.AssetRequested += (_, e) =>
+        {
+            if (e.NameWithoutLocale.IsEquivalentTo(HarveyStoryJournal.AssetName))
+                e.LoadFrom(() => new Dictionary<string, HarveyStoryJournalEntry>(), AssetLoadPriority.Exclusive);
+        };
 
         var conversationSettings = new HarveyMedicalConversationSettings
         {

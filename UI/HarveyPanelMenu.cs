@@ -16,10 +16,6 @@ public sealed class HarveyPanelMenu
     public const string ModUniqueId = "marilynsinister.HarveyOverhaul.Core";
     public const string ViewAssetName = "Mods/marilynsinister.HarveyOverhaul.Core/Views/HarveyPanel";
 
-    private const int PreferredWidth = 1040;
-    private const int PreferredHeight = 760;
-    private const int MinWidth = 820;
-    private const int MinHeight = 560;
 
     private readonly IMonitor _monitor;
     private IViewEngine? _viewEngine;
@@ -73,6 +69,7 @@ public sealed class HarveyPanelMenu
             typeof(HarveyPanelViewModel),
             typeof(HarveyPanelTabButtonViewModel),
             typeof(HarveyPanelSectionViewModel),
+            typeof(HarveyPlanItemViewModel),
             typeof(HandbookViewModel),
             typeof(HandbookRow));
         _viewEngine.PreloadAssets();
@@ -297,12 +294,11 @@ public sealed class HarveyPanelMenu
     {
         controller.PositionSelector = () =>
         {
+            // Тот же расчёт, что и для layout окна в SML (HarveyPanelLayout) — окно не выходит за экран.
             var viewport = Game1.uiViewport;
-            int width = controller.Menu?.width > 0 ? controller.Menu.width : PreferredWidth;
-            int height = controller.Menu?.height > 0 ? controller.Menu.height : PreferredHeight;
-
-            width = Math.Clamp(width, MinWidth, Math.Max(MinWidth, (int)(viewport.Width * 0.9f)));
-            height = Math.Clamp(height, MinHeight, Math.Max(MinHeight, (int)(viewport.Height * 0.85f)));
+            var size = HarveyPanelLayout.Compute(_activeViewModel?.Tabs.Count ?? 5);
+            int width = size.Width;
+            int height = size.Height;
 
             if (controller.Menu != null)
             {

@@ -24,6 +24,10 @@ public interface IHarveyCoreApi
     void RegisterStressStateApi(IHarveyStressStateApi api);
     IHarveyStressStateApi? GetStressStateApi();
 
+    /// <summary>Единая шкала доверия (владеет Stress). Без Stress — null, Injury работает на своей шкале.</summary>
+    void RegisterCareTrustApi(IHarveyCareTrustApi api);
+    IHarveyCareTrustApi? GetCareTrustApi();
+
     void OpenPanel(HarveyPanelTab tab = HarveyPanelTab.Overview);
     void ClosePanel();
     bool IsPanelOpen { get; }

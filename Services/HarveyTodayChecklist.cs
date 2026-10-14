@@ -40,7 +40,7 @@ internal static class HarveyTodayChecklist
             sections.Add(new HarveyPanelSectionViewModel
             {
                 Headline = "Что можно сделать сегодня",
-                BodyText = string.Join("\n", steps.Select(s => "• " + s)),
+                BodyText = string.Join("\n", steps.Select(s => "- " + s)),
             });
         }
 

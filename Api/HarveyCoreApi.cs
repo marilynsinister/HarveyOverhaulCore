@@ -16,6 +16,7 @@ public sealed class HarveyCoreApi : IHarveyCoreApi
     private readonly HarveyMedicalClickDiagnostics _clickDiagnostics;
     private IHarveyRecoveryPlanApi? _recoveryPlanApi;
     private IHarveyStressStateApi? _stressStateApi;
+    private IHarveyCareTrustApi? _careTrustApi;
 
     public HarveyCoreApi(
         HarveyProviderRegistry registry,
@@ -65,6 +66,12 @@ public sealed class HarveyCoreApi : IHarveyCoreApi
 
     public IHarveyStressStateApi? GetStressStateApi()
         => _stressStateApi;
+
+    public void RegisterCareTrustApi(IHarveyCareTrustApi api)
+        => _careTrustApi = api ?? throw new ArgumentNullException(nameof(api));
+
+    public IHarveyCareTrustApi? GetCareTrustApi()
+        => _careTrustApi;
 
     public void OpenPanel(HarveyPanelTab tab = HarveyPanelTab.Overview)
         => _panelMenu.OpenToTab(_panelService, tab);

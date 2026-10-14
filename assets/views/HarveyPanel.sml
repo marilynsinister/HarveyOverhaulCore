@@ -1,5 +1,5 @@
 <frame
-  layout="1040px 760px"
+  layout={PanelLayout}
   background={@Mods/StardewUI/Sprites/MenuBackground}
   border={@Mods/StardewUI/Sprites/MenuBorder}
   border-thickness="36,36,40,36"
@@ -20,7 +20,7 @@
           horizontal-content-alignment="middle">
       <panel *repeat={Tabs} margin="4,0,4,0">
         <frame *if={Active}
-               layout="160px 56px"
+               layout={ButtonLayout}
                background={@Mods/StardewUI/Sprites/ButtonLight}
                horizontal-content-alignment="middle"
                vertical-content-alignment="middle"
@@ -32,7 +32,7 @@
           </lane>
         </frame>
         <frame *!if={Active}
-               layout="160px 56px"
+               layout={ButtonLayout}
                background={@Mods/StardewUI/Sprites/ButtonDark}
                opacity="0.8"
                horizontal-content-alignment="middle"
@@ -64,7 +64,61 @@
               <label font="dialogue" text={Headline} color={AccentColor} layout="stretch content" />
             </lane>
             <label *if={HasStatusLine} font="small" text={StatusLine} layout="stretch content" color={StatusColor} margin="0,0,0,6" />
+
+            <!-- Общий прогресс плана (шапка): дорожка 360px, заливка = доля выполненного. -->
+            <lane *if={HasProgress} orientation="horizontal" layout="stretch content" vertical-content-alignment="middle" margin="0,2,0,10">
+              <panel layout="360px 14px" margin="0,0,12,0">
+                <image layout="360px 14px" sprite={BarSprite} tint="#c9a77a" fit="Stretch" />
+                <image *if={HasProgressFill} layout={ProgressFillLayout} sprite={BarSprite} tint={ProgressColor} fit="Stretch" />
+              </panel>
+              <label font="small" text={ProgressText} color="#7f6139" />
+            </lane>
+
             <label *if={HasBodyText} font="small" text={BodyText} layout="stretch content" margin="0,0,0,2" />
+
+            <!-- Пункты плана: иконка состояния, заголовок, пояснение, прогресс и раскрываемые «Почему / Риск / Дальше». -->
+            <lane *repeat={Items} orientation="horizontal" layout="stretch content" margin="0,6,0,6">
+              <image *if={HasStateIcon}
+                     layout="28px 28px"
+                     sprite={StateIcon}
+                     tint={StateTint}
+                     tooltip={StateTooltip}
+                     margin="0,0,12,0" />
+              <lane orientation="vertical" layout="stretch content">
+                <label font="small" bold="true" text={Title} color={TitleColor} layout="stretch content" />
+                <label *if={HasSubtitle} font="small" text={Subtitle} color="#5c4630" layout="stretch content" margin="0,2,0,0" />
+                <lane *if={HasProgress} orientation="horizontal" layout="stretch content" vertical-content-alignment="middle" margin="0,6,0,2">
+                  <panel layout="220px 10px" margin="0,0,10,0">
+                    <image layout="220px 10px" sprite={BarSprite} tint="#c9a77a" fit="Stretch" />
+                    <image *if={HasProgressFill} layout={ProgressFillLayout} sprite={BarSprite} tint={ProgressColor} fit="Stretch" />
+                  </panel>
+                  <label font="small" text={ProgressText} color="#7f6139" />
+                </lane>
+                <label *if={ShowDetailText} font="small" text={DetailText} color="#5c4630" layout="stretch content" margin="0,6,0,0" />
+                <label *if={ShowRiskText} font="small" text={RiskText} color="#8b4513" layout="stretch content" margin="0,4,0,0" />
+                <label *if={HasDetails}
+                       font="small"
+                       text={ToggleLabel}
+                       color="#5b6fa8"
+                       focusable="true"
+                       left-click=|ToggleDetails()|
+                       margin="0,4,0,0" />
+              </lane>
+            </lane>
+
+            <label *if={HasFootnote} font="small" text={Footnote} color="#8a7a66" layout="stretch content" margin="0,6,0,0" />
+
+            <!-- Кнопка секции (например, «Пересмотреть договорённость» во вкладке «Доверие»). -->
+            <frame *if={HasAction}
+                   layout="content 48px"
+                   padding="16,0,16,0"
+                   margin="0,10,0,0"
+                   background={@Mods/StardewUI/Sprites/ButtonLight}
+                   vertical-content-alignment="middle"
+                   focusable="true"
+                   left-click=|RunAction()|>
+              <label font="small" text={ActionLabel} color="#3b2a1a" max-lines="1" />
+            </frame>
           </lane>
         </frame>
 

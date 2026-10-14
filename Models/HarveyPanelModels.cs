@@ -6,7 +6,11 @@ public enum HarveyPanelTab
     Stress,
     Injuries,
     Plan,
-    Trust
+    Trust,
+    /// <summary>Справочник состояний стресса (раньше был внизу вкладки «Стресс»).</summary>
+    Handbook,
+    /// <summary>Пройденные сюжетные сцены и мягкая подсказка, где искать следующую.</summary>
+    Story
 }
 
 public sealed class HarveyPanelOverviewFields
@@ -55,6 +59,12 @@ public sealed class HarveyPanelContribution
     public List<HarveyPanelSectionDto> PlanSections { get; set; } = new();
     public List<HarveyPanelSectionDto> TrustSections { get; set; } = new();
 
+    /// <summary>
+    /// Секции, которые всегда дописываются в конец «Обзора» (например, «Харви сегодня устал»).
+    /// В отличие от OverviewSections не отключают сводку из OverviewFields.
+    /// </summary>
+    public List<HarveyPanelSectionDto> ExtraOverviewSections { get; set; } = new();
+
     public HarveyPanelOverviewFields? OverviewFields { get; set; }
     public HarveyPanelStressFields? StressFields { get; set; }
     public string InjuriesBody { get; set; } = "";
@@ -78,6 +88,15 @@ public sealed class HarveyPanelSectionDto
     public string Status { get; set; } = "";
     public int Priority { get; set; }
     public HarveyPanelSeverity Severity { get; set; } = HarveyPanelSeverity.Normal;
+
+    /// <summary>Подпись кнопки под секцией (пусто — без кнопки).</summary>
+    public string ActionLabel { get; set; } = "";
+
+    /// <summary>Что передать в <see cref="Api.IHarveyPanelActionProvider.HandlePanelAction"/>.</summary>
+    public string ActionId { get; set; } = "";
+
+    /// <summary>Чья это секция. Ставит Core при сборке окна — провайдеру заполнять не нужно.</summary>
+    public string SourceProviderId { get; set; } = "";
 }
 
 public enum HarveyPanelSeverity

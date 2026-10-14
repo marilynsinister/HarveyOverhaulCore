@@ -1,4 +1,5 @@
-﻿using HarveyOverhaul.Core.Models;
+﻿using HarveyOverhaul.Core.Api;
+using HarveyOverhaul.Core.Models;
 using HarveyOverhaul.Core.UI;
 
 namespace HarveyOverhaul.Core.Services;
@@ -10,12 +11,17 @@ public sealed class HarveyPanelService
 {
     private readonly HarveyProviderRegistry _registry;
     private readonly HarveyPlanAdvisor _planAdvisor;
+    private readonly HarveyStoryJournal _storyJournal;
 
-    public HarveyPanelService(HarveyProviderRegistry registry, HarveyPlanAdvisor planAdvisor)
+    public HarveyPanelService(HarveyProviderRegistry registry, HarveyPlanAdvisor planAdvisor, HarveyStoryJournal storyJournal)
     {
         _registry = registry;
         _planAdvisor = planAdvisor;
+        _storyJournal = storyJournal;
     }
+
+    /// <summary>Окно просит пересобраться (после кнопки в секции). Подписывается Core при создании API.</summary>
+    public Action<HarveyPanelTab>? RefreshRequested { get; set; }
 
     public (HarveyPlanSnapshot Snapshot, string? FallbackReason) BuildPlanOpenContext()
     {
@@ -60,6 +66,8 @@ public sealed class HarveyPanelService
     {
         HarveyPanelTab.Stress => _registry.IsRegistered(HarveyProviderRegistry.StressProviderId),
         HarveyPanelTab.Injuries => _registry.IsRegistered(HarveyProviderRegistry.InjuryProviderId),
+        HarveyPanelTab.Handbook => _registry.IsRegistered(HarveyProviderRegistry.StressProviderId),
+        HarveyPanelTab.Story => _storyJournal.HasEntries,
         _ => true,
     };
 
@@ -80,6 +88,7 @@ public sealed class HarveyPanelService
     public HarveyPanelViewModel BuildViewModel(HarveyPanelTab selectedTab = HarveyPanelTab.Overview, bool debugMode = false)
     {
         var contributions = _registry.CollectContributions();
+        TagSectionSources(contributions);
         var overview = MergeOverview(contributions);
         var stress = contributions.Select(c => c.StressFields).FirstOrDefault(f => f != null);
         var trust = MergeTrust(contributions);
@@ -129,6 +138,16 @@ public sealed class HarveyPanelService
         return vm;
     }
 
+    private static void TagSectionSources(IEnumerable<HarveyPanelContribution> contributions)
+    {
+        foreach (var c in contributions)
+        {
+            foreach (var dto in c.OverviewSections.Concat(c.StressSections).Concat(c.InjurySections)
+                         .Concat(c.TrustSections).Concat(c.ExtraOverviewSections))
+                dto.SourceProviderId = c.ProviderId;
+        }
+    }
+
     private static IReadOnlyDictionary<string, string> BuildTabTitles()
         => new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -137,6 +156,8 @@ public sealed class HarveyPanelService
             [nameof(HarveyPanelTab.Injuries)] = HarveyPanelTexts.Tabs.Injuries,
             [nameof(HarveyPanelTab.Plan)] = HarveyPanelTexts.Tabs.Plan,
             [nameof(HarveyPanelTab.Trust)] = HarveyPanelTexts.Tabs.Trust,
+            [nameof(HarveyPanelTab.Handbook)] = HarveyPanelTexts.Tabs.Handbook,
+            [nameof(HarveyPanelTab.Story)] = HarveyPanelTexts.Tabs.Story,
         };
 
     private static IReadOnlyDictionary<string, string> BuildAdviceByTab(
@@ -159,10 +180,12 @@ public sealed class HarveyPanelService
             [nameof(HarveyPanelTab.Injuries)] = mergedAdvice,
             [nameof(HarveyPanelTab.Plan)] = planAdvice,
             [nameof(HarveyPanelTab.Trust)] = mergedAdvice,
+            [nameof(HarveyPanelTab.Handbook)] = mergedAdvice,
+            [nameof(HarveyPanelTab.Story)] = "",
         };
     }
 
-    private static IReadOnlyDictionary<string, IReadOnlyList<HarveyPanelSectionViewModel>> BuildSectionsByTab(
+    private IReadOnlyDictionary<string, IReadOnlyList<HarveyPanelSectionViewModel>> BuildSectionsByTab(
         IReadOnlyList<HarveyPanelContribution> contributions,
         HarveyPanelOverviewFields overview,
         HarveyPanelStressFields? stress,
@@ -179,19 +202,22 @@ public sealed class HarveyPanelService
             [nameof(HarveyPanelTab.Injuries)] = BuildInjurySections(contributions, injuriesBody),
             [nameof(HarveyPanelTab.Plan)] = EnsurePlanTabSections(planSections, planSnapshot),
             [nameof(HarveyPanelTab.Trust)] = BuildTrustSections(contributions, trust),
+            [nameof(HarveyPanelTab.Handbook)] = Array.Empty<HarveyPanelSectionViewModel>(),
+            [nameof(HarveyPanelTab.Story)] = _storyJournal.BuildSections(),
         };
     }
 
-    private static IReadOnlyList<HarveyPanelSectionViewModel> BuildOverviewSections(
+    private IReadOnlyList<HarveyPanelSectionViewModel> BuildOverviewSections(
         IReadOnlyList<HarveyPanelContribution> contributions,
         HarveyPanelOverviewFields overview,
         HarveyPlanSnapshot planSnapshot)
     {
-        var sections = ConvertDtoSections(contributions.SelectMany(c => c.OverviewSections));
+        var sections = ConvertDtoSections(contributions.SelectMany(c => c.OverviewSections), HarveyPanelTab.Overview);
         PrependPlanSummary(sections, planSnapshot);
+        var extras = ConvertDtoSections(contributions.SelectMany(c => c.ExtraOverviewSections), HarveyPanelTab.Overview);
 
         if (sections.Count > 0)
-            return HarveyTodayChecklist.AppendTo(sections);
+            return HarveyTodayChecklist.AppendTo(sections).Concat(extras).ToList();
 
         var result = new List<HarveyPanelSectionViewModel>();
 
@@ -220,14 +246,14 @@ public sealed class HarveyPanelService
             });
         }
 
-        return HarveyTodayChecklist.AppendTo(result);
+        return HarveyTodayChecklist.AppendTo(result).Concat(extras).ToList();
     }
 
-    private static IReadOnlyList<HarveyPanelSectionViewModel> BuildStressSections(
+    private IReadOnlyList<HarveyPanelSectionViewModel> BuildStressSections(
         IReadOnlyList<HarveyPanelContribution> contributions,
         HarveyPanelStressFields? stress)
     {
-        var sections = ConvertDtoSections(contributions.SelectMany(c => c.StressSections));
+        var sections = ConvertDtoSections(contributions.SelectMany(c => c.StressSections), HarveyPanelTab.Stress);
         if (sections.Count > 0)
             return sections;
 
@@ -267,11 +293,11 @@ public sealed class HarveyPanelService
         return result;
     }
 
-    private static IReadOnlyList<HarveyPanelSectionViewModel> BuildInjurySections(
+    private IReadOnlyList<HarveyPanelSectionViewModel> BuildInjurySections(
         IReadOnlyList<HarveyPanelContribution> contributions,
         string injuriesBody)
     {
-        var sections = ConvertDtoSections(contributions.SelectMany(c => c.InjurySections));
+        var sections = ConvertDtoSections(contributions.SelectMany(c => c.InjurySections), HarveyPanelTab.Injuries);
         if (sections.Count > 0)
             return sections;
 
@@ -366,11 +392,11 @@ public sealed class HarveyPanelService
         sections.Insert(0, summary);
     }
 
-    private static IReadOnlyList<HarveyPanelSectionViewModel> BuildTrustSections(
+    private IReadOnlyList<HarveyPanelSectionViewModel> BuildTrustSections(
         IReadOnlyList<HarveyPanelContribution> contributions,
         HarveyPanelTrustFields trust)
     {
-        var sections = ConvertDtoSections(contributions.SelectMany(c => c.TrustSections));
+        var sections = ConvertDtoSections(contributions.SelectMany(c => c.TrustSections), HarveyPanelTab.Trust);
         if (sections.Count > 0)
             return sections;
 
@@ -416,7 +442,7 @@ public sealed class HarveyPanelService
         return result;
     }
 
-    private static List<HarveyPanelSectionViewModel> ConvertDtoSections(IEnumerable<HarveyPanelSectionDto> sections)
+    private List<HarveyPanelSectionViewModel> ConvertDtoSections(IEnumerable<HarveyPanelSectionDto> sections, HarveyPanelTab tab)
         => sections
             .OrderBy(s => s.Priority)
             .Select(section => new HarveyPanelSectionViewModel
@@ -426,11 +452,30 @@ public sealed class HarveyPanelService
                 BodyText = section.Body,
                 AccentColor = MapAccentColor(section.Severity),
                 StatusColor = MapStatusColor(section.Severity),
+                ActionLabel = section.ActionLabel,
+                ActionCallback = BuildActionCallback(section, tab),
             })
             .Where(section => !string.IsNullOrWhiteSpace(section.Headline)
                 || !string.IsNullOrWhiteSpace(section.StatusLine)
                 || !string.IsNullOrWhiteSpace(section.BodyText))
             .ToList();
+
+    /// <summary>Кнопка секции → провайдер-владелец → пересборка окна на той же вкладке.</summary>
+    private Action? BuildActionCallback(HarveyPanelSectionDto section, HarveyPanelTab tab)
+    {
+        if (string.IsNullOrWhiteSpace(section.ActionId) || string.IsNullOrWhiteSpace(section.SourceProviderId))
+            return null;
+
+        if (_registry.GetProviders().FirstOrDefault(p => p.UniqueId == section.SourceProviderId) is not IHarveyPanelActionProvider provider)
+            return null;
+
+        string actionId = section.ActionId;
+        return () =>
+        {
+            if (provider.HandlePanelAction(actionId))
+                RefreshRequested?.Invoke(tab);
+        };
+    }
 
     private static string MapAccentColor(HarveyPanelSeverity severity) => severity switch
     {
@@ -663,6 +708,8 @@ public sealed class HarveyPanelService
             (HarveyPanelTab.Injuries, HarveyPanelTexts.Tabs.Injuries),
             (HarveyPanelTab.Plan, HarveyPanelTexts.Tabs.Plan),
             (HarveyPanelTab.Trust, HarveyPanelTexts.Tabs.Trust),
+            (HarveyPanelTab.Handbook, HarveyPanelTexts.Tabs.Handbook),
+            (HarveyPanelTab.Story, HarveyPanelTexts.Tabs.Story),
         })
         {
             if (!isAvailable(tab))
@@ -675,6 +722,15 @@ public sealed class HarveyPanelService
                 Label = label,
                 Active = string.Equals(key, selectedKey, StringComparison.Ordinal),
             });
+        }
+
+        // Окно и вкладки подстраиваются под экран: при 7 вкладках по 160px они не помещались бы в 1040px.
+        var size = HarveyPanelLayout.Compute(tabs.Count);
+        vm.PanelLayout = size.PanelLayout;
+        foreach (var t in tabs)
+        {
+            t.ButtonLayout = size.TabLayout;
+            t.ShowIcon = size.ShowTabIcons;
         }
 
         vm.InitializeTabs(tabs, selectedKey);
