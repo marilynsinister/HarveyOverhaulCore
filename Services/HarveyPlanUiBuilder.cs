@@ -218,6 +218,10 @@ internal static class HarveyPlanUiBuilder
             status: later.Count > 1 ? "По порядку, сверху вниз" : "",
             numbered: later.Count > 1);
 
+        // Состоявшиеся визиты — с галочкой, иначе после разговора пункт просто пропадал.
+        var visitsDone = Unshown(GetDoneAppointments(snapshot), shown);
+        AddDirectiveSectionIfAny(sections, "Визит к Харви", visitsDone, status: visitsDone.Count > 0 ? "Разговор засчитан" : "");
+
         var rules = Unshown(snapshot.TodayRules, shown);
         AddDirectiveSectionIfAny(sections, "Режим на сегодня", rules, status: ProgressStatus(rules));
 
@@ -438,6 +442,11 @@ internal static class HarveyPlanUiBuilder
         => snapshot.AllDirectives
             .Where(d => d.Type == HarveyCareDirectiveType.Appointment && d.State == HarveyCareDirectiveState.Active)
             .OrderBy(d => HarveyCareDirectivePriority.Rank(d.Priority))
+            .ToList();
+
+    private static List<HarveyCareDirective> GetDoneAppointments(HarveyPlanSnapshot snapshot)
+        => snapshot.AllDirectives
+            .Where(d => d.Type == HarveyCareDirectiveType.Appointment && d.State == HarveyCareDirectiveState.Done)
             .ToList();
 
     private static List<HarveyCareDirective> Unshown(IEnumerable<HarveyCareDirective> directives, HashSet<string> shown)
