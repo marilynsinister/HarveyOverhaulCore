@@ -82,6 +82,7 @@ public sealed class ModEntry : Mod
 
         var topicResetter = new RepeatableTopicResetter(Monitor);
         helper.Events.GameLoop.SaveLoaded += (_, _) => topicResetter.OnSaveLoaded();
+        helper.Events.GameLoop.ReturnedToTitle += (_, _) => topicResetter.OnReturnedToTitle();
         helper.Events.GameLoop.UpdateTicked += (_, e) => topicResetter.OnUpdateTicked(e.Ticks);
         helper.Events.Input.ButtonPressed += OnButtonPressed;
 
