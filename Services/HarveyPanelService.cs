@@ -724,15 +724,11 @@ public sealed class HarveyPanelService
             });
         }
 
-        // Окно и вкладки подстраиваются под экран: при 7 вкладках по 160px они не помещались бы в 1040px.
-        var size = HarveyPanelLayout.Compute(tabs.Count);
-        vm.PanelLayout = size.PanelLayout;
-        foreach (var t in tabs)
-        {
-            t.ButtonLayout = size.TabLayout;
-            t.ShowIcon = size.ShowTabIcons;
-        }
-
+        // Окно подстраивается под экран; вкладки получают ширину по своей подписи и переносятся целиком.
+        var panelSize = HarveyPanelLayout.Compute();
+        vm.PanelLayout = panelSize.PanelLayout;
+        vm.CompactLayout = panelSize.Height < 650 || panelSize.Width < 850;
+        vm.HandbookGridLayout = panelSize.Width < 900 ? "count: 1" : "count: 2";
         vm.InitializeTabs(tabs, selectedKey);
     }
 }

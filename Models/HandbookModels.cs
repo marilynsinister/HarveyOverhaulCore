@@ -34,6 +34,7 @@ public sealed class HandbookRow
     public string StatusText { get; set; } = "";
     public string BuffId { get; init; } = "";
     public string TreatmentStageText { get; set; } = "";
+    public bool HasTreatmentStage => !string.IsNullOrWhiteSpace(TreatmentStageText);
     public string StatusColor { get; set; } = "#7f6139";
 }
 

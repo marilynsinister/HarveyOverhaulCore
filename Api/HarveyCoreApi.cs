@@ -18,6 +18,18 @@ public sealed class HarveyCoreApi : IHarveyCoreApi
     private IHarveyStressStateApi? _stressStateApi;
     private IHarveyCareTrustApi? _careTrustApi;
 
+    /// <summary>Читает текущую настройку Core (меняется в GMCM без перезапуска).</summary>
+    public Func<string> GetDifficulty { get; set; } = () => HarveyDifficulty.Standard;
+
+    public string? DifficultyOverride
+    {
+        get
+        {
+            string value = HarveyDifficulty.Normalize(GetDifficulty());
+            return value == HarveyDifficulty.PerMod ? null : value;
+        }
+    }
+
     public HarveyCoreApi(
         HarveyProviderRegistry registry,
         HarveyCareDirectiveRegistry directiveRegistry,

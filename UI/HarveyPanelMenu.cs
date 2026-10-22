@@ -42,6 +42,7 @@ public sealed class HarveyPanelMenu
 
     public void TryInitialize(IModHelper helper)
     {
+        HarveyPanelIcons.Initialize(helper.ModContent);
         if (_viewEngine != null)
             return;
 
@@ -68,8 +69,11 @@ public sealed class HarveyPanelMenu
         _viewEngine.PreloadModels(
             typeof(HarveyPanelViewModel),
             typeof(HarveyPanelTabButtonViewModel),
+            typeof(HarveyPanelTabRowViewModel),
             typeof(HarveyPanelSectionViewModel),
             typeof(HarveyPlanItemViewModel),
+            typeof(HarveyPlanDashboardViewModel),
+            typeof(HarveyPlanMetricViewModel),
             typeof(HandbookViewModel),
             typeof(HandbookRow));
         _viewEngine.PreloadAssets();
@@ -296,7 +300,7 @@ public sealed class HarveyPanelMenu
         {
             // Тот же расчёт, что и для layout окна в SML (HarveyPanelLayout) — окно не выходит за экран.
             var viewport = Game1.uiViewport;
-            var size = HarveyPanelLayout.Compute(_activeViewModel?.Tabs.Count ?? 5);
+            var size = HarveyPanelLayout.Compute();
             int width = size.Width;
             int height = size.Height;
 

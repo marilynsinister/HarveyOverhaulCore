@@ -21,4 +21,9 @@ public interface IHarveyCareTrustApi
 
     /// <summary>Снять очки (с кулдауном и потолком штрафа владельца шкалы).</summary>
     void Penalize(string sourceProviderId, string reason, int points);
+
+    /// <summary>
+    /// Харви это не запрещено (HarveyCareConsentIds): «да» или ещё не спрашивал. «Пока нет» и «нет» он соблюдает.
+    /// </summary>
+    bool IsConsentAllowed(string consentId) => true;
 }

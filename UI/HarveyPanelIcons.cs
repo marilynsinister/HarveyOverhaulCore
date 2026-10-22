@@ -2,24 +2,77 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using StardewUI.Graphics;
 using StardewValley;
+using StardewModdingAPI;
+using HarveyOverhaul.Core.Models;
 
 namespace HarveyOverhaul.Core.UI;
 
 /// <summary>
-/// Иконки окна «План Харви». Берём спрайты ванильных предметов через реестр — они есть в любой игре
-/// и не зависят от координат на Cursors. Без кеша: другой мод может подменить текстуру. Портрет Харви — для «Совета Харви» и вкладки «Обзор».
+/// Медицинские иллюстрации поставляются с Core. Портрет Харви учитывает Portraiture;
+/// ванильные предметы остаются запасным вариантом. Текстуры получает SMAPI, без отдельного кеша.
 /// </summary>
 public static class HarveyPanelIcons
 {
+    private static IModContentHelper? _content;
+
+    public static void Initialize(IModContentHelper content) => _content = content;
+
+    /// <summary>Bundled medical illustrations; no dependency on the CP pack's item registry.</summary>
+    public static Sprite? Illustration(string key)
+    {
+        if (key == "portrait")
+            return HarveyPortrait();
+        if (_content == null)
+            return null;
+        try
+        {
+            if (key == "book")
+            {
+                var book = _content.Load<Texture2D>("assets/sprites/planBook.png");
+                return new Sprite(book, new Rectangle(0, 0, 32, 32));
+            }
+            int index = key switch
+            {
+                "bandage" => 0, "antiseptic" => 1, "painkiller" => 2,
+                "tea" => 3, "kit" => 4, "ointment" => 5,
+                "lantern" => 6, "bag" => 7, "broth" => 8,
+                _ => -1,
+            };
+            if (index < 0)
+                return null;
+            var sheet = _content.Load<Texture2D>("assets/sprites/planItems.png");
+            return new Sprite(sheet, new Rectangle(index * 16, 0, 16, 16));
+        }
+        catch
+        {
+            return null; // Missing illustration must never prevent opening the plan.
+        }
+    }
+
+    public static string ForDirective(HarveyCareDirective directive)
+    {
+        string text = $"{directive.Id} {directive.Title} {directive.Text}";
+        if (Has(text, "бинт") || Has(text, "повяз") || Has(text, "bandage")) return "bandage";
+        if (Has(text, "антисеп") || Has(text, "antiseptic")) return "antiseptic";
+        if (Has(text, "обезбол") || Has(text, "painkiller")) return "painkiller";
+        if (Has(text, "мазь") || Has(text, "рубц") || Has(text, "ointment")) return "ointment";
+        if (Has(text, "сон") || Has(text, "сна") || Has(text, "лечь") || Has(text, "sleep")
+            || Has(text, "темнот") || Has(text, "darkness") || Has(text, "фонар")) return "lantern";
+        if (Has(text, "бульон") || Has(text, "еда") || Has(text, "поешь") || Has(text, "meal")) return "broth";
+        if (directive.Type == HarveyCareDirectiveType.Appointment) return "bag";
+        if (Has(text, "чай") || Has(text, "отдых") || directive.Source == HarveyCareDirectiveSource.Stress) return "tea";
+        return directive.Source == HarveyCareDirectiveSource.Injury ? "kit" : "book";
+    }
+
     /// <summary>Иконка вкладки по её ключу (HarveyPanelTab).</summary>
     public static Sprite? ForTab(string tabKey) => tabKey switch
     {
         "Overview" => HarveyPortrait(),
-        "Stress" => Item("(O)614"),      // зелёный чай
-        "Injuries" => Item("(O)351"),    // мышечный бальзам
-        "Plan" => Item("(O)102"),        // потерянная книга — журнал
+        "Stress" => Illustration("tea") ?? Item("(O)614"),
+        "Injuries" => Illustration("bandage") ?? Item("(O)351"),
+        "Plan" => Illustration("book") ?? Item("(O)102"),
         "Trust" => Item("(O)458"),       // букет
-        "Handbook" => Item("(O)326"),    // книга-справочник
+        "Handbook" => Illustration("book") ?? Item("(O)326"),
         "Story" => Item("(O)402"),       // душистый горошек — память о сценах
         _ => null,
     };
@@ -28,20 +81,16 @@ public static class HarveyPanelIcons
     public static Sprite? ForSection(string headline, string tabKey)
     {
         string h = headline ?? "";
-        string? itemId =
-            Has(h, "сделай сейчас") ? "(O)773" :                       // эликсир — срочно
-            Has(h, "затем") || Has(h, "визит к Харви") ? "(O)349" :     // тоник — следующий шаг
-            Has(h, "Режим") ? "(O)395" :                                 // кофе — распорядок дня
-            Has(h, "нельзя") || Has(h, "не засчит") ? "(O)769" :         // эссенция пустоты — запрет / срыв
-            Has(h, "Успей") ? "(O)787" :                                 // батарея — до конца дня
-            Has(h, "Предупрежд") ? "(O)768" :                            // солнечная эссенция — внимание
-            Has(h, "Травм") ? "(O)351" :
-            Has(h, "Стресс") ? "(O)614" :
-            Has(h, "дальше") ? "(O)434" :                                // звёздный плод — что впереди
-            Has(h, "спокойно") ? "(O)591" :                              // тюльпан
-            null;
+        string? illustration =
+            Has(h, "Сначала") || Has(h, "сделай сейчас") ? "kit" :
+            Has(h, "Следующие шаги") || Has(h, "визит к Харви") ? "bag" :
+            Has(h, "Режим") || Has(h, "Стресс") ? "tea" :
+            Has(h, "Ограничения") || Has(h, "нельзя") || Has(h, "Успей") ? "lantern" :
+            Has(h, "Травм") ? "bandage" :
+            Has(h, "Предупрежд") || Has(h, "пошло не так") ? "kit" :
+            Has(h, "дальше") || Has(h, "Выполнено") ? "book" : null;
 
-        return itemId != null ? Item(itemId) : ForTab(tabKey);
+        return illustration != null ? Illustration(illustration) ?? ForTab(tabKey) : ForTab(tabKey);
     }
 
     public static Sprite? HarveyPortrait()

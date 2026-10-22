@@ -61,4 +61,10 @@ public interface IHarveyCoreApi
     HarveyMedicalConversationSettings MedicalConversationSettings { get; }
 
     HarveyPlanSnapshot BuildHarveyPlanSnapshot();
+
+    /// <summary>
+    /// Общий режим сложности (<see cref="HarveyDifficulty"/>): Cozy / Standard / Strict.
+    /// null — «PerMod»: каждая часть мода живёт по своим настройкам.
+    /// </summary>
+    string? DifficultyOverride => null;
 }

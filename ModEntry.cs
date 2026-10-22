@@ -20,6 +20,7 @@ public sealed class ModEntry : Mod
     private HarveyPanelService _panelService = null!;
     private HarveyMedicalIntentArbitrator _medicalIntentArbitrator = null!;
     private HarveyMarriageMilestones _marriageMilestones = null!;
+    private HarveyOutingsService _outings = null!;
     private IModHelper _helper = null!;
 
     public override void Entry(IModHelper helper)
@@ -60,6 +61,11 @@ public sealed class ModEntry : Mod
             _panelService,
             _medicalIntentArbitrator,
             clickDiagnostics);
+        _coreApi.GetDifficulty = () => _config.Difficulty;
+
+        // Общая сложность: минусы дебаффов CP по режиму (Data/Buffs читают и события, и Injury, и Stress).
+        var buffScaler = new HarveyDifficultyBuffScaler(Monitor, () => HarveyDifficulty.Normalize(_config.Difficulty));
+        helper.Events.Content.AssetRequested += (_, e) => buffScaler.OnAssetRequested(e);
 
         helper.ConsoleCommands.Add(
             "harvey_plan_debug",
@@ -73,7 +79,13 @@ public sealed class ModEntry : Mod
 
         _marriageMilestones = new HarveyMarriageMilestones(Monitor);
 
+        new HarveyFamilyLifeService(helper).Initialize(new HarmonyLib.Harmony(ModManifest.UniqueID + ".FamilyLife"));
+        new HarveyArendArrivalService(helper, Monitor).Initialize();
+        _outings = new HarveyOutingsService(helper, Monitor, _config);
+        _outings.Initialize();
+
         helper.Events.GameLoop.GameLaunched += OnGameLaunched;
+        helper.Events.GameLoop.SaveLoaded += (_, _) => _marriageMilestones.OnDayStarted();
         helper.Events.GameLoop.DayStarted += (_, _) => _marriageMilestones.OnDayStarted();
 
         HudMessageLimiter.Apply(new HarmonyLib.Harmony(ModManifest.UniqueID), Monitor);
@@ -105,6 +117,13 @@ public sealed class ModEntry : Mod
     private void OnGameLaunched(object? sender, GameLaunchedEventArgs e)
     {
         HarveyModCompatibilityCheck.Run(Helper.ModRegistry, Monitor);
+        GenericModConfigMenuIntegration.Register(Helper, ModManifest, _config,
+            onSaved: () =>
+            {
+                Helper.GameContent.InvalidateCache("Data/Buffs");
+                _outings.RefreshSettings();
+            });
+        Monitor.Log($"[HarveyOverhaul.Core] Сложность: {HarveyDifficulty.DisplayName(HarveyDifficulty.Normalize(_config.Difficulty))}.", LogLevel.Info);
         _panelMenu.TryInitialize(Helper);
 
         if (_panelMenu.IsAvailable)

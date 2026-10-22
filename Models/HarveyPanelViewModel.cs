@@ -20,6 +20,12 @@ public sealed class HarveyPanelViewModel : INotifyPropertyChanged
 
     public ObservableCollection<HarveyPanelTabButtonViewModel> Tabs { get; private set; } = new();
 
+    /// <summary>Вкладки, разбитые на ряды (на узком экране — два ряда вместо выезда за край).</summary>
+    public IReadOnlyList<HarveyPanelTabRowViewModel> TabRows { get; private set; } = Array.Empty<HarveyPanelTabRowViewModel>();
+
+    /// <summary>Совместимость со старой моделью. Новые ряды рассчитывает ArrangeTabs по ширине каждой подписи.</summary>
+    public int TabsPerRow { get; set; } = int.MaxValue;
+
     public ObservableCollection<HarveyPanelSectionViewModel> ActiveSections { get; private set; } = new();
 
     public string SelectedTabKey
@@ -49,6 +55,14 @@ public sealed class HarveyPanelViewModel : INotifyPropertyChanged
 
     /// <summary>Размер окна под экран (HarveyPanelLayout).</summary>
     public StardewUI.Layout.LayoutParameters PanelLayout { get; set; } = StardewUI.Layout.LayoutParameters.FixedSize(1040, 760);
+    public bool CompactLayout { get; set; }
+    public string HandbookGridLayout { get; set; } = "count: 2";
+    public StardewUI.Layout.Edges PanelBorderThickness => CompactLayout
+        ? new StardewUI.Layout.Edges(24) : new StardewUI.Layout.Edges(36, 36, 40, 36);
+    public StardewUI.Layout.Edges PanelPadding => CompactLayout
+        ? new StardewUI.Layout.Edges(16, 12, 16, 12) : new StardewUI.Layout.Edges(28, 24, 28, 24);
+    public StardewUI.Layout.Edges BannerPadding => CompactLayout
+        ? new StardewUI.Layout.Edges(12, 6, 12, 6) : new StardewUI.Layout.Edges(18, 10, 18, 10);
 
     public string OverviewStateLine { get; init; } = "";
     public string OverviewAssignmentLine { get; init; } = "";
@@ -73,6 +87,8 @@ public sealed class HarveyPanelViewModel : INotifyPropertyChanged
     public bool ShowPlanTabContent { get; private set; }
 
     public bool HasPlanAdvice => !string.IsNullOrWhiteSpace(HarveyAdviceText);
+    public bool ShowAdviceFooter => HasPlanAdvice && !CompactLayout;
+    public bool ShowInlineAdvice => HasPlanAdvice && CompactLayout;
 
     /// <summary>Портрет Харви у «Совета Харви».</summary>
     public StardewUI.Graphics.Sprite? AdvicePortrait => HarveyPanelIcons.HarveyPortrait();
@@ -114,7 +130,9 @@ public sealed class HarveyPanelViewModel : INotifyPropertyChanged
     public void InitializeTabs(IEnumerable<HarveyPanelTabButtonViewModel> tabs, string selectedKey)
     {
         Tabs = new ObservableCollection<HarveyPanelTabButtonViewModel>(tabs);
+        TabRows = HarveyPanelLayout.ArrangeTabs(Tabs);
         OnPropertyChanged(nameof(Tabs));
+        OnPropertyChanged(nameof(TabRows));
         SelectTab(selectedKey);
     }
 
@@ -189,6 +207,8 @@ public sealed class HarveyPanelViewModel : INotifyPropertyChanged
 
         OnPropertyChanged(nameof(HasPlanAdvice));
         OnPropertyChanged(nameof(HasAdvicePortrait));
+        OnPropertyChanged(nameof(ShowAdviceFooter));
+        OnPropertyChanged(nameof(ShowInlineAdvice));
 
         ShowPlanTabContent = string.Equals(SelectedTabKey, nameof(HarveyPanelTab.Plan), StringComparison.Ordinal)
             && !string.IsNullOrWhiteSpace(PlanDetailBody)

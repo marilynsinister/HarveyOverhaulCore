@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using HarveyOverhaul.Core.UI;
 using StardewUI.Graphics;
 using StardewUI.Layout;
 using StardewValley;
@@ -12,8 +13,6 @@ namespace HarveyOverhaul.Core.Models;
 /// </summary>
 public sealed class HarveyPlanItemViewModel : INotifyPropertyChanged
 {
-    /// <summary>Ширина дорожки прогресса в пикселях (должна совпадать с layout в HarveyPanel.sml).</summary>
-    public const int ProgressTrackWidth = 220;
     private const int ProgressBarHeight = 10;
 
     private bool _expanded;
@@ -27,6 +26,13 @@ public sealed class HarveyPlanItemViewModel : INotifyPropertyChanged
     public Sprite? StateIcon { get; init; }
     public string StateTint { get; init; } = "#ffffff";
     public string StateTooltip { get; init; } = "";
+    public string StateLabel { get; init; } = "";
+    public string StateColor { get; init; } = HarveyPlanColors.Muted;
+    public string Illustration { get; init; } = "";
+    public Sprite? ActivityIcon => HarveyPanelIcons.Illustration(Illustration);
+    public bool HasActivityIcon => ActivityIcon != null;
+    public string TimingText { get; init; } = "";
+    public bool HasTimingText => !string.IsNullOrWhiteSpace(TimingText);
 
     public string ProgressText { get; init; } = "";
     public float ProgressFraction { get; init; }
@@ -34,6 +40,10 @@ public sealed class HarveyPlanItemViewModel : INotifyPropertyChanged
 
     /// <summary>«Почему» и «Дальше» — обычным цветом.</summary>
     public string DetailText { get; init; } = "";
+    public string ReasonText { get; init; } = "";
+    public string NextStepText { get; init; } = "";
+    public bool HasReason => !string.IsNullOrWhiteSpace(ReasonText);
+    public bool HasNextStep => !string.IsNullOrWhiteSpace(NextStepText);
 
     /// <summary>Чем грозит нарушение — выделено цветом.</summary>
     public string RiskText { get; init; } = "";
@@ -45,11 +55,10 @@ public sealed class HarveyPlanItemViewModel : INotifyPropertyChanged
     public bool HasSubtitle => !string.IsNullOrWhiteSpace(Subtitle);
     public bool HasProgress => !string.IsNullOrWhiteSpace(ProgressText);
     public bool HasProgressFill => HasProgress && ProgressFraction > 0f;
-    public bool HasDetails => !string.IsNullOrWhiteSpace(DetailText) || !string.IsNullOrWhiteSpace(RiskText);
+    public bool HasDetails => HasReason || HasNextStep || !string.IsNullOrWhiteSpace(DetailText) || !string.IsNullOrWhiteSpace(RiskText);
 
-    public LayoutParameters ProgressFillLayout => LayoutParameters.FixedSize(
-        Math.Max(2, (int)MathF.Round(ProgressTrackWidth * Math.Clamp(ProgressFraction, 0f, 1f))),
-        ProgressBarHeight);
+    /// <summary>Заливка в процентах от дорожки (дорожка в SML — доля ширины карточки, а не фиксированные пиксели).</summary>
+    public LayoutParameters ProgressFillLayout => HarveyPanelSectionViewModel.PercentFill(ProgressFraction, ProgressBarHeight);
 
     public bool Expanded
     {
@@ -59,8 +68,9 @@ public sealed class HarveyPlanItemViewModel : INotifyPropertyChanged
 
     public bool ShowDetails => Expanded && HasDetails;
     public bool ShowDetailText => ShowDetails && !string.IsNullOrWhiteSpace(DetailText);
+    public bool ShowLegacyDetail => ShowDetailText && !HasReason && !HasNextStep;
     public bool ShowRiskText => ShowDetails && !string.IsNullOrWhiteSpace(RiskText);
-    public string ToggleLabel => Expanded ? "Скрыть подробности" : "Почему и что дальше?";
+    public string ToggleLabel => Expanded ? "Скрыть пояснение" : "Почему и что дальше?";
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -74,6 +84,7 @@ public sealed class HarveyPlanItemViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(Expanded));
         OnPropertyChanged(nameof(ShowDetails));
         OnPropertyChanged(nameof(ShowDetailText));
+        OnPropertyChanged(nameof(ShowLegacyDetail));
         OnPropertyChanged(nameof(ShowRiskText));
         OnPropertyChanged(nameof(ToggleLabel));
         return true;

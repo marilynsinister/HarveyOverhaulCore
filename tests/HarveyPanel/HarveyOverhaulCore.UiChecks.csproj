@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <CheckEolTargetFramework>false</CheckEolTargetFramework>
+    <GamePath>D:\Games\Steam\steamapps\common\Stardew Valley</GamePath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="HarveyOverhaulCore" HintPath="..\..\bin\Debug\net6.0\HarveyOverhaulCore.dll" />
+    <Reference Include="StardewUI" HintPath="$(GamePath)\Mods\StardewUI\StardewUI.dll" Private="false" />
+    <Reference Include="Stardew Valley" HintPath="$(GamePath)\Stardew Valley.dll" Private="false" />
+    <Reference Include="MonoGame.Framework" HintPath="$(GamePath)\MonoGame.Framework.dll" Private="false" />
+  </ItemGroup>
+</Project>

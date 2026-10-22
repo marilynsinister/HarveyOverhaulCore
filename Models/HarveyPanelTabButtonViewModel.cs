@@ -53,3 +53,12 @@ public sealed class HarveyPanelTabButtonViewModel : INotifyPropertyChanged
     private void OnPropertyChanged(string propertyName)
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 }
+
+/// <summary>Один ряд вкладок.</summary>
+public sealed class HarveyPanelTabRowViewModel
+{
+    public HarveyPanelTabRowViewModel(IReadOnlyList<HarveyPanelTabButtonViewModel> tabs)
+        => Tabs = tabs;
+
+    public IReadOnlyList<HarveyPanelTabButtonViewModel> Tabs { get; }
+}

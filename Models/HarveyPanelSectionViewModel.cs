@@ -3,6 +3,16 @@ using StardewUI.Layout;
 
 namespace HarveyOverhaul.Core.Models;
 
+public enum HarveyPanelSectionStyle
+{
+    /// <summary>Обычная карточка в рамке — пункты, которые нужно выполнить.</summary>
+    Card,
+    /// <summary>Шапка вкладки: крупный заголовок, общий прогресс.</summary>
+    Hero,
+    /// <summary>Справка без рамки — чтобы не спорила с карточками действий.</summary>
+    Plain,
+}
+
 public sealed class HarveyPanelSectionViewModel
 {
     public string Headline { get; set; } = "";
@@ -23,21 +33,49 @@ public sealed class HarveyPanelSectionViewModel
     public float ProgressFraction { get; set; }
     public string ProgressColor { get; set; } = HarveyPlanColors.Good;
 
+    public HarveyPlanDashboardViewModel? Dashboard { get; set; }
+    public bool HasDashboard => Dashboard != null;
+    public bool Collapsible { get; set; }
+    public bool IsCollapsible => Collapsible || IsPlain;
+    public bool Expanded { get; set; }
+    public string ItemCountText => Items.Count > 0 ? Items.Count.ToString() : "";
+
     public bool HasHeadline => !string.IsNullOrWhiteSpace(Headline);
     public bool HasStatusLine => !string.IsNullOrWhiteSpace(StatusLine);
     public bool HasItems => Items.Count > 0;
-    public bool HasBodyText => !HasItems && !string.IsNullOrWhiteSpace(BodyText);
+    public bool HasBodyText => !HasDashboard && !HasItems && !string.IsNullOrWhiteSpace(BodyText);
     public bool HasFootnote => !string.IsNullOrWhiteSpace(Footnote);
     public bool HasProgress => !string.IsNullOrWhiteSpace(ProgressText);
     public bool HasProgressFill => HasProgress && ProgressFraction > 0f;
     public Sprite BarSprite => UiSprites.White;
 
-    public LayoutParameters ProgressFillLayout => LayoutParameters.FixedSize(
-        Math.Max(2, (int)MathF.Round(SectionProgressTrackWidth * Math.Clamp(ProgressFraction, 0f, 1f))),
-        14);
+    /// <summary>
+    /// Заливка общей полоски прогресса — в процентах от дорожки. Раньше дорожка была 360px и вместе
+    /// с подписью вылезала за край карточки в узком окне.
+    /// </summary>
+    public LayoutParameters ProgressFillLayout => PercentFill(ProgressFraction, 14);
 
-    /// <summary>Ширина общей полоски прогресса (должна совпадать с layout в HarveyPanel.sml).</summary>
-    public const int SectionProgressTrackWidth = 360;
+    internal static LayoutParameters PercentFill(float fraction, int height) => new()
+    {
+        Width = Length.Percent(Math.Max(1.5f, 100f * Math.Clamp(fraction, 0f, 1f))),
+        Height = Length.Px(height),
+    };
+
+    /// <summary>Как выглядит секция: шапка, обычная карточка или справочный блок без рамки.</summary>
+    public HarveyPanelSectionStyle Style { get; set; } = HarveyPanelSectionStyle.Card;
+
+    /// <summary>Крупный заголовок (шрифт dialogue) — только у шапки; у остальных компактный жирный.</summary>
+    public bool IsHero => Style == HarveyPanelSectionStyle.Hero;
+    public bool IsPlain => Style == HarveyPanelSectionStyle.Plain;
+
+    public Sprite? FrameBackground => IsPlain ? null : UiSprites.MenuBackground;
+    public Sprite? FrameBorder => IsPlain ? null : UiSprites.MenuBorder;
+    public Edges FrameBorderThickness => IsPlain ? Edges.NONE : new Edges(12);
+    public Edges FramePadding => IsHero ? new Edges(22, 20, 22, 18)
+        : IsPlain ? new Edges(8, 4, 8, 4)
+        : new Edges(18, 14, 18, 14);
+
+    public LayoutParameters IconLayout => IsHero ? LayoutParameters.FixedSize(36, 36) : LayoutParameters.FixedSize(24, 24);
 
     /// <summary>Иконка у заголовка секции (подбирается по смыслу заголовка при показе вкладки).</summary>
     public Sprite? Icon { get; set; }
