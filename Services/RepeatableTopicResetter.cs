@@ -7,7 +7,7 @@ namespace HarveyOverhaul.Core.Services;
 /// В 1.6 реплику по разговорному топику NPC произносит один раз за всю игру: после показа ставится
 /// mailReceived «&lt;NPC&gt;_&lt;topic&gt;», и при повторном появлении топика NPC молчит.
 /// Медицинские топики повторяются (вторая заноза, новая травма, новая фаза), поэтому при каждом
-/// новом появлении topic*/HarveyMod_*-ключа флаг снимается. Не чаще раза в игровой день на ключ — защита от
+/// новом появлении topic*/HarveyMod_*-ключа флаг снимается. Не чаще MaxResetsPerDay раз в игровой день на ключ — защита от
 /// зацикливания, если код переставляет топик сразу после реплики.
 /// Ловит топики из любого источника: C#, CP $action, команды событий.
 /// «Новый» — значит, его не было при прошлой проверке. Список уже виденных топиков хранится в modData
@@ -17,11 +17,16 @@ namespace HarveyOverhaul.Core.Services;
 public sealed class RepeatableTopicResetter
 {
     private const int PollIntervalTicks = 30;
+    /// <summary>
+    /// Повод может повториться в тот же день (второе нарушение режима → снова NeedVisit, повязка опять промокла).
+    /// При лимите «раз в день» Харви во второй раз молчал, а план звал к нему.
+    /// </summary>
+    private const int MaxResetsPerDay = 3;
     private const string KnownTopicsKey = "marilynsinister.HarveyOverhaul.Core/KnownRepeatableTopics";
 
     private readonly IMonitor _monitor;
     private readonly HashSet<string> _knownTopics = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, int> _lastResetDay = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (int Day, int Count)> _resetsToday = new(StringComparer.Ordinal);
     private bool _loaded;
 
     public RepeatableTopicResetter(IMonitor monitor)
@@ -36,7 +41,7 @@ public sealed class RepeatableTopicResetter
     public void OnSaveLoaded()
     {
         _knownTopics.Clear();
-        _lastResetDay.Clear();
+        _resetsToday.Clear();
         _loaded = true;
 
         if (Game1.player?.modData.TryGetValue(KnownTopicsKey, out string? saved) == true)
@@ -55,7 +60,7 @@ public sealed class RepeatableTopicResetter
     {
         _loaded = false;
         _knownTopics.Clear();
-        _lastResetDay.Clear();
+        _resetsToday.Clear();
     }
 
     public void OnUpdateTicked(uint ticks)
@@ -81,10 +86,11 @@ public sealed class RepeatableTopicResetter
             if (_knownTopics.Contains(key))
                 continue;
 
-            if (_lastResetDay.TryGetValue(key, out int lastDay) && lastDay == today)
+            int resetsToday = _resetsToday.TryGetValue(key, out var resets) && resets.Day == today ? resets.Count : 0;
+            if (resetsToday >= MaxResetsPerDay)
                 continue;
 
-            _lastResetDay[key] = today;
+            _resetsToday[key] = (today, resetsToday + 1);
             int removed = Game1.player.mailReceived.RemoveWhere(flag => IsNpcTopicFlag(flag, key));
             if (removed > 0)
                 _monitor.Log($"[TopicReset] {key}: снято {removed} флаг(ов) «уже сказано» — NPC снова отреагирует", LogLevel.Debug);
