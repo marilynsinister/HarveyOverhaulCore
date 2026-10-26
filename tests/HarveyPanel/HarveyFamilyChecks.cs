@@ -13,6 +13,13 @@ internal static class HarveyFamilyChecks
         check(HarveyMarriageMilestones.AnniversaryStage(336) == 3, "Third anniversary unlocks the later variants.");
         check(HarveyMarriageMilestones.AnniversaryStage(1120) == 3, "Later years must remain reachable.");
 
+        check(HarveyMarriageMilestones.IsWeddingEve(1), "The day before the wedding is the eve.");
+        foreach (int days in new[] { -1, 0, 2, 3 })
+            check(!HarveyMarriageMilestones.IsWeddingEve(days), $"{days} days to the wedding is not the eve.");
+        check(HarveyMarriageMilestones.IsFirstMorning(1), "The morning after the wedding is the first morning.");
+        foreach (int days in new[] { -1, 0, 2 })
+            check(!HarveyMarriageMilestones.IsFirstMorning(days), $"Day {days} of marriage is not the first morning.");
+
         var memory = new HarveyKeepsakeData
         {
             Description = "drawing without a chosen detail",

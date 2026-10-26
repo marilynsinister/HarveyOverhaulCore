@@ -29,7 +29,7 @@ public static class HarveyPanelIcons
             if (key == "book")
             {
                 var book = _content.Load<Texture2D>("assets/sprites/planBook.png");
-                return new Sprite(book, new Rectangle(0, 0, 32, 32));
+                return new Sprite(book, new Rectangle(0, 0, 16, 16));
             }
             int index = key switch
             {
