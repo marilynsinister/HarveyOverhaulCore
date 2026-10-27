@@ -67,4 +67,19 @@ public interface IHarveyCoreApi
     /// null — «PerMod»: каждая часть мода живёт по своим настройкам.
     /// </summary>
     string? DifficultyOverride => null;
+
+    /// <summary>Ступень 4 лестницы последствий: Харви сам приходит на ферму, если лечение запущено.</summary>
+    bool HouseCallsEnabled => true;
+
+    /// <summary>Ступень 5: обморок/срыв после повторного отказа. На «Уютно» всегда false.</summary>
+    bool NeglectCollapseEnabled => true;
+
+    /// <summary>
+    /// Занять единственный за день слот визита Харви на ферму (Injury и Stress делят его).
+    /// false — сегодня уже приходит другой провайдер.
+    /// </summary>
+    bool TryClaimHouseCall(string providerId) => true;
+
+    /// <summary>Визит не состоялся — освободить слот, чтобы его мог занять другой провайдер.</summary>
+    void ReleaseHouseCall(string providerId) { }
 }

@@ -19,6 +19,10 @@ public static class HarveyOutingRules
     public static bool CanDepart(bool enabled, bool together, bool saturday, bool festivalWeekend, int time)
         => enabled && together && saturday && !festivalWeekend && time is >= 800 and <= 1300;
 
+    /// <summary>День рождения Харви — 14 зимы, воскресенье: выезд в субботу 13-го увозит его на праздник в Зузу.</summary>
+    public static bool IsHarveyBirthdayTrip(string season, int day)
+        => string.Equals(season, "winter", StringComparison.OrdinalIgnoreCase) && day == 13;
+
     public static bool CanResume(int startDay, int today, string phase)
         => today == startDay && phase is "Touring" or "Overnight"
             || today == startDay + 1 && phase is "Overnight" or "Sunday";

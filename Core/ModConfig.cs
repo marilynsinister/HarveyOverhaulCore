@@ -27,4 +27,10 @@ public sealed class ModConfig
     /// Не PerMod — Injury и Stress берут пресет отсюда, а минусы дебаффов из CP масштабируются.
     /// </summary>
     public string Difficulty { get; set; } = HarveyOverhaul.Core.Models.HarveyDifficulty.Standard;
+
+    /// <summary>Лестница последствий, ступень 4: если лечение запущено, Харви сам приходит на ферму.</summary>
+    public bool EnableHouseCalls { get; set; } = true;
+
+    /// <summary>Ступень 5: после повторного отказа — обморок от травмы или срыв от стресса. На «Уютно» не бывает.</summary>
+    public bool EnableNeglectCollapse { get; set; } = true;
 }

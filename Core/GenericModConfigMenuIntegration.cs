@@ -37,6 +37,8 @@ internal static class GenericModConfigMenuIntegration
             reset: () =>
             {
                 config.Difficulty = new ModConfig().Difficulty;
+                config.EnableHouseCalls = true;
+                config.EnableNeglectCollapse = true;
                 config.OpenHarveyOutings = new ModConfig().OpenHarveyOutings;
                 config.EnablePlayerBirthday = true;
                 config.BirthdaySeason = "NotSet";
@@ -67,6 +69,14 @@ internal static class GenericModConfigMenuIntegration
                   + "Настройки каждой части: сложность берётся из настроек Injury и Stress по отдельности.",
             HarveyDifficulty.All,
             HarveyDifficulty.DisplayName);
+        gmcm.AddBoolOption(manifest, () => config.EnableHouseCalls, value => config.EnableHouseCalls = value,
+            () => "Харви приходит сам",
+            () => "Если травму или стресс долго не лечить, Харви утром сам придёт на ферму. "
+                  + "Можно согласиться на осмотр или попросить пару дней.");
+        gmcm.AddBoolOption(manifest, () => config.EnableNeglectCollapse, value => config.EnableNeglectCollapse = value,
+            () => "Обморок, если тянуть дальше",
+            () => "После второго отказа тело может не выдержать: обморок и день в клинике (травма) "
+                  + "или срыв (стресс). Один раз на случай, без потери денег. На «Уютно» выключено всегда.");
 
         gmcm.AddSectionTitle(manifest, () => "День рождения и выходные");
         gmcm.AddParagraph(manifest, () => "Дата автоматически берётся из Happy Birthday. "

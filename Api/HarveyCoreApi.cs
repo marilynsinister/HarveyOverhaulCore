@@ -30,6 +30,21 @@ public sealed class HarveyCoreApi : IHarveyCoreApi
         }
     }
 
+    private readonly HarveyHouseCallCoordinator _houseCalls = new();
+
+    /// <summary>Читает настройки лестницы последствий Core (меняются в GMCM без перезапуска).</summary>
+    public Func<bool> GetHouseCallsEnabled { get; set; } = () => true;
+    public Func<bool> GetNeglectCollapseEnabled { get; set; } = () => true;
+
+    public bool HouseCallsEnabled => GetHouseCallsEnabled();
+
+    public bool NeglectCollapseEnabled
+        => GetNeglectCollapseEnabled() && DifficultyOverride != HarveyDifficulty.Cozy;
+
+    public bool TryClaimHouseCall(string providerId) => _houseCalls.TryClaim(providerId);
+
+    public void ReleaseHouseCall(string providerId) => _houseCalls.Release(providerId);
+
     public HarveyCoreApi(
         HarveyProviderRegistry registry,
         HarveyCareDirectiveRegistry directiveRegistry,

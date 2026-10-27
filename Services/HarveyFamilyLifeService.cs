@@ -14,6 +14,9 @@ namespace HarveyOverhaul.Core.Services;
 public sealed class HarveyFamilyLifeService
 {
     public const string ToddlerFlag = "HarveyFamily_ToddlerReady";
+    /// <summary>HarveyFamily_ChildYear1…3: прошёл год, два, три с рождения (спрайт в игре дальше «ходит» не растёт, растёт история).</summary>
+    public const string ChildYearPrefix = "HarveyFamily_ChildYear";
+    public const int MaxChildYears = 3;
     public const string ChildAsset = "Characters/HarveyFamilyChild";
     public const string KeepsakesAsset = "Mods/marilynsinister.HarveyOverhaul/Keepsakes";
     private static HarveyFamilyLifeService? _instance;
@@ -44,13 +47,25 @@ public sealed class HarveyFamilyLifeService
     private void RefreshFamily()
     {
         _commentedToday.Clear();
-        if (Game1.player.spouse == "Harvey" && SceneChild() != null)
+        var child = Game1.player.spouse == "Harvey" ? SceneChild() : null;
+        if (child != null)
             Game1.player.mailReceived.Add(ToddlerFlag);
         else
             Game1.player.mailReceived.Remove(ToddlerFlag);
+        int years = child == null ? 0 : ChildYears(child.daysOld.Value);
+        for (int year = 1; year <= MaxChildYears; year++)
+        {
+            if (year <= years)
+                Game1.player.mailReceived.Add(ChildYearPrefix + year);
+            else
+                Game1.player.mailReceived.Remove(ChildYearPrefix + year);
+        }
         // Другой ребёнок, возраст, внешность или другое сохранение — всегда актуальный спрайт.
         _helper.GameContent.InvalidateCache(ChildAsset);
     }
+
+    /// <summary>Полных игровых лет с рождения (112 дней), не больше <see cref="MaxChildYears"/>.</summary>
+    public static int ChildYears(int daysOld) => Math.Clamp(daysOld / 112, 0, MaxChildYears);
 
     private void OnAssetRequested(object? sender, AssetRequestedEventArgs e)
     {

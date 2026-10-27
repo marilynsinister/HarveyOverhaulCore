@@ -22,6 +22,10 @@ public sealed class HarveyOutingsService(IModHelper helper, IMonitor monitor, Mo
     private const string Prefix = "marilynsinister.HarveyOverhaul.Core/Outings/";
     private const string CompanionName = "HarveyZuzuCompanion";
     private const string Invite = "marilynsinister.HarveyOverhaul_mailBirthdayInvitation";
+    /// <summary>Уже возвращались из Зузу хотя бы раз — открывает сцены второй поездки.</summary>
+    public const string VisitedFlag = "HarveyZuzu_Visited";
+    /// <summary>Текущая поездка — на день рождения Харви (выезд 13 зимы).</summary>
+    public const string BirthdayTripFlag = "HarveyZuzu_HisBirthday";
     private bool _resumeHotel;
     private bool _returnWhenFree;
     private string? _lastError;
@@ -187,12 +191,17 @@ public sealed class HarveyOutingsService(IModHelper helper, IMonitor monitor, Mo
 
     private void UpdateTripFlags()
     {
-        foreach (string flag in new[] { "HarveyZuzu_Active", "HarveyZuzu_Sunday" })
+        foreach (string flag in new[] { "HarveyZuzu_Active", "HarveyZuzu_Sunday", BirthdayTripFlag })
             Game1.player.mailReceived.Remove(flag);
         if (Active)
             Game1.player.mailReceived.Add("HarveyZuzu_Active");
         if (Get("TripPhase") == "Sunday")
             Game1.player.mailReceived.Add("HarveyZuzu_Sunday");
+        if (Active && Get("TripBirthday") == "true")
+            Game1.player.mailReceived.Add(BirthdayTripFlag);
+        // Сохранения, где поездка была до появления флага: дата возвращения уже записана.
+        if (Number("TripLastReturn") > 0)
+            Game1.player.mailReceived.Add(VisitedFlag);
     }
 
     private void OnWarped(object? sender, WarpedEventArgs e)
@@ -287,7 +296,11 @@ public sealed class HarveyOutingsService(IModHelper helper, IMonitor monitor, Mo
             return;
         }
         int fare = Math.Max(0, config.ZuzuTripFare);
-        Ask($"Два билета и номер на одну ночь: {fare} з. Вернуться можно раньше. Поехать?",
+        bool hisBirthday = HarveyOutingRules.IsHarveyBirthdayTrip(Game1.currentSeason, Game1.dayOfMonth);
+        string question = hisBirthday
+            ? $"Завтра у Харви день рождения. Увезти его в Зузу на выходные? Два билета и номер: {fare} з."
+            : $"Два билета и номер на одну ночь: {fare} з. Вернуться можно раньше. Поехать?";
+        Ask(question,
             new[] { new Response("Yes", "Поехать"), new Response("No", "В другой раз") }, answer =>
         {
             if (answer != "Yes") return;
@@ -299,6 +312,7 @@ public sealed class HarveyOutingsService(IModHelper helper, IMonitor monitor, Mo
             Game1.player.Money -= fare;
             Set("TripStart", Today.ToString());
             Set("TripPhase", "Touring");
+            Set("TripBirthday", hisBirthday ? "true" : "false");
             UpdateTripFlags();
             Game1.warpFarmer(Square, 18, 23, 0);
         });
@@ -347,7 +361,9 @@ public sealed class HarveyOutingsService(IModHelper helper, IMonitor monitor, Mo
         {
             Game1.player.activeDialogueEvents["HarveyZuzu_Returned"] = 7;
             Set("TripLastReturn", Today.ToString());
+            Game1.player.mailReceived.Add(VisitedFlag);
         }
+        Set("TripBirthday", "false");
         Set("TripPhase", "None");
         _resumeHotel = false;
         UpdateTripFlags();

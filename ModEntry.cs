@@ -62,6 +62,8 @@ public sealed class ModEntry : Mod
             _medicalIntentArbitrator,
             clickDiagnostics);
         _coreApi.GetDifficulty = () => _config.Difficulty;
+        _coreApi.GetHouseCallsEnabled = () => _config.EnableHouseCalls;
+        _coreApi.GetNeglectCollapseEnabled = () => _config.EnableNeglectCollapse;
 
         // Общая сложность: минусы дебаффов CP по режиму (Data/Buffs читают и события, и Injury, и Stress).
         var buffScaler = new HarveyDifficultyBuffScaler(Monitor, () => HarveyDifficulty.Normalize(_config.Difficulty));
@@ -81,6 +83,9 @@ public sealed class ModEntry : Mod
 
         new HarveyFamilyLifeService(helper).Initialize(new HarmonyLib.Harmony(ModManifest.UniqueID + ".FamilyLife"));
         new HarveyArendArrivalService(helper, Monitor).Initialize();
+        new HarveyEventDialogueGuard(helper, Monitor).Initialize();
+        new HarveyRadioService(helper, Monitor, _config).Initialize();
+        new HarveyBalanceStats(helper, Monitor, _config).Initialize();
         _outings = new HarveyOutingsService(helper, Monitor, _config);
         _outings.Initialize();
 
