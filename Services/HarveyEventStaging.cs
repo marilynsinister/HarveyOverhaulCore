@@ -1,6 +1,8 @@
 using System.Text;
 using Microsoft.Xna.Framework;
 using StardewValley;
+using StardewValley.Locations;
+using StardewValley.Objects;
 
 namespace HarveyOverhaul.Core.Services;
 
@@ -11,6 +13,25 @@ public static class HarveyEventStaging
     {
         Point player = Game1.player.TilePoint;
         return Compose(script, player, FindVisitorTile(location, player), openingCommands);
+    }
+
+    public static string AtBed(GameLocation location, string script, string openingCommands = "")
+    {
+        if (location is not FarmHouse home || home.GetPlayerBed() is not { } bed)
+            throw new InvalidOperationException("Home care needs the player's actual bed.");
+        Point patient = bed.GetBedSpot();
+        return ComposeAtBed(script, patient, FindVisitorTile(location, patient), openingCommands);
+    }
+
+    internal static string ComposeAtBed(string script, Point patient, Point visitor, string openingCommands = "")
+    {
+        var commands = SplitCommands(Compose(script, patient, visitor, openingCommands));
+        commands[2] = commands[2].Replace("farmer -1 -1 2 ", $"farmer {patient.X} {patient.Y} 2 ", StringComparison.Ordinal);
+        commands.InsertRange(4, new[] { "ignoreCollisions farmer", "showFrame farmer 107" });
+        // showFrame holds a pose. Release it on every normal/final-dialogue exit;
+        // skipping is handled by the game's event cleanup.
+        return string.Join('/', commands.SelectMany(c => c == "end" || c.StartsWith("end ", StringComparison.Ordinal)
+            ? new[] { "stopAnimation farmer", c } : new[] { c }));
     }
 
     internal static string Compose(string script, Point player, Point visitor, string openingCommands = "")
@@ -54,7 +75,7 @@ public static class HarveyEventStaging
                     continue;
 
                 var feet = new Rectangle(tile.X * 64 + 8, tile.Y * 64 + 16, 48, 40);
-                if (location.furniture.Any(f => !f.isPassable() && f.boundingBox.Value.Intersects(feet))
+                if (location.furniture.Any(f => (f is BedFurniture || !f.isPassable()) && f.boundingBox.Value.Intersects(feet))
                     || location.characters.Any(n => n.Name != "Harvey" && n.GetBoundingBox().Intersects(feet)))
                     continue;
                 return tile;
